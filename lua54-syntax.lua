@@ -28,7 +28,7 @@ do
 
 	---@class Block
 	---@field statements Statement[]
-	---@field return? ReturnStatement
+	---@field returnStatement? ReturnStatement
 
 	--- retstat ::= return [explist] [';']
 	---@alias ReturnStatement Expression[] explist
@@ -57,24 +57,7 @@ do
 		---@field values Expression[] explist
 
 		--- var
-		---@alias Access IdentifierAccess | IndexAccess | DotAccess
-
-		--- Name branch of var
-		---@class IdentifierAccess
-		---@field type "ident"
-		---@field inner Identifier
-
-		--- prefixexp '[' exp ']' branch of var
-		---@class IndexAccess
-		---@field type "index"
-		---@field left PrefixExpression
-		---@field sub Expression
-
-		--- prefixexp '.' Name branch of var
-		---@class DotAccess
-		---@field type "dot"
-		---@field left PrefixExpression
-		---@field sub Identifier
+		---@alias Access PrefixAccessExpression
 	end
 
 	do
@@ -162,7 +145,7 @@ do
 
 		---@class LocalFuncDef
 		---@field type "localFuncDef"
-		---@field name Identifier
+		---@field name FuncName
 		---@field parameters Identifier[]
 		---@field rest boolean
 		---@field body Block
@@ -210,10 +193,7 @@ do
 	do
 		---@alias PrefixExpression PrefixAccessExpression | PrefixCallExpression | PrefixGroupExpression
 
-		---@class PrefixAccessExpression
-		---@field type "prefix"
-		---@field subtype "access"
-		---@field key Access
+		---@alias PrefixAccessExpression PrefixIdentifierAccessExpression | PrefixIndexAccessExpression | PrefixDotAccessExpression
 
 		---@class PrefixCallExpression
 		---@field type "prefix"
@@ -224,6 +204,26 @@ do
 		---@field type "prefix"
 		---@field subtype "group"
 		---@field inner Expression
+
+		--- Name branch of var
+		---@class PrefixIdentifierAccessExpression
+		---@field type "prefix"
+		---@field subtype "identifier"
+		---@field inner Identifier
+
+		--- prefixexp '[' exp ']' branch of var
+		---@class PrefixIndexAccessExpression
+		---@field type "prefix"
+		---@field subtype "index"
+		---@field left PrefixExpression
+		---@field sub Expression
+
+		--- prefixexp '.' Name branch of var
+		---@class PrefixDotAccessExpression
+		---@field type "prefix"
+		---@field subtype "dot"
+		---@field left PrefixExpression
+		---@field sub Identifier
 	end
 
 	do

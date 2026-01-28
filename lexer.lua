@@ -1,7 +1,7 @@
 local util = require("util")
 local LazyStream = require("lazyStream")
 
----@alias Token { type: "string", value: string } | { type: "number", value: number } | { type: "keyword", value: Keyword } | { type: "operator", value: Operator } | { type: "symbol", value: Symbol } | { type: "assign", value: Assign }
+---@alias Token { type: "string", value: string } | { type: "number", value: number } | { type: "keyword", value: Keyword } | { type: "operator", value: Operator } | { type: "symbol", value: Symbol } | { type: "assign", value: Assign } | { type: "identifier", value: string }
 ---@alias Operator UnaryOperator | BinaryOperator
 ---@alias Keyword "break" | "do" | "else" | "elseif" | "end" | "for" | "function" | "goto" | "if" | "in" | "local" | "repeat" | "return" | "then" | "until" | "while"
 ---@alias Symbol "{" | "}" | "(" | ")" | "[" | "]" | "," | "." | ":" | "::" | ";"
@@ -20,7 +20,7 @@ end
 
 local function readN(charStream, n)
 	local out = ""
-	for i = 1,n do
+	for _ = 1,n do
 		out = out .. (charStream:next() or "")
 	end
 	return out
@@ -119,6 +119,7 @@ function Lexer:createTokenGenerator()
 				{ match = "&", result = { type = "operator" }, autoSet = "value" },
 				{ match = "|", result = { type = "operator" }, autoSet = "value" },
 				{ match = "~", result = { type = "operator" }, autoSet = "value" },
+				{ match = "..",result = { type = "operator" }, autoSet = "value" },
 
 				{ match = "<",  result = { type = "operator" }, autoSet = "value" },
 				{ match = "<=", result = { type = "operator" }, autoSet = "value" },
@@ -202,6 +203,7 @@ function Lexer:createTokenGenerator()
 			end
 		})) --[[@as any]])
 		-- print("Tokenizer: Generated " .. util.dump(result))
+		if result ~= nil then result.supertype = "token" end
 		return result
 	end
 end

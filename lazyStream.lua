@@ -1,5 +1,8 @@
 local util = require("util")
 
+---Temporary fix because LuaLS doesn't understand that class generics should be visible in fields.
+---@alias T Token
+
 ---@generic T
 ---@class LazyStream<T>
 ---@field generateNext fun(): T
@@ -82,11 +85,11 @@ function LazyStream:peek()
 end
 
 function LazyStream:eq(value, ...)
-	if util.deepEq(self:peek(), value) then
+	if util.deepEq(self:peek(), value, "b") then
 		return true
 	end
 	for i = 1, select("#",...) do
-		if util.deepEq(self:peek(), select(i,...)) then
+		if util.deepEq(self:peek(), select(i,...), "b") then
 			return true
 		end
 	end
@@ -124,7 +127,7 @@ end
 
 ---Calls fun within a save/recall block. If fun returns nil, recalls. Otherwise, continues. When passed multiple functions, calls them in order and returns the first non-nil result.
 ---@generic T
----@param fun fun(): T|nil, string?
+---@param fun1 fun(): T|nil, string?
 ---@param ... fun(): T|nil, string?
 ---@return T|nil, string
 function LazyStream:scope(fun1,...)

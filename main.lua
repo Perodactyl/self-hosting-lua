@@ -3,19 +3,8 @@ local STP = require("stacktraceplus")
 
 local Lexer = require("lexer")
 local Parser = require("parser")
+local codegen = require("codegen")
 local util = require("util")
-
-local function tokenListFormatter(key, row, color)
-	if row == nil then return nil end
-	if key == "type" then return util.formatLiteral(util.toCase(tostring(row[key]), "SCREAMING_SNAKE_CASE"), color) end
-	if key == "value" then
-		if row.type == "keyword" then return util.formatKeyword(row.value, color) end
-		if row.type == "identifier" then return tostring(row.value) end
-		if row.type == "symbol" then return tostring(row.value) end
-		if row.type == "operator" then return tostring(row.value) end
-		if row.type == "assign" then return tostring(row.value) end
-	end
-end
 
 local testProgram = [============[
 a,b,c = 1,2,3
@@ -29,14 +18,20 @@ end
 for i = 1,30 do print(fizzbuzz(n)) end
 ]============]
 
-local source = testProgram
+local sourceFile = io.open(arg[0], "r")
+if sourceFile == nil then error("Failed to open sourceFile") end
+-- local source = sourceFile:read("a")
+sourceFile:close()
+
+local source = [[package.path = "./?.lua;./?/init.lua;" .. package.path]]
+-- local source = [[package.path]]
 
 do
 	local lexer = Lexer.new(source)
 	local gen = lexer:createTokenGenerator()
 
 	local output = util.collect(gen)
-	util.table(output, { "type", "value" }, tokenListFormatter)
+	util.table(output, { "type", "value" }, util.tokenListFormatter)
 end
 
 do
@@ -44,11 +39,26 @@ do
 	local gen = lexer:createTokenGenerator()
 
 	local parser = Parser.new(gen)
-	local success, result = xpcall(parser.parseChunk, STP.stacktrace, parser)
+	local success, result = xpcall(parser.parseChunk, debug.traceback, parser)
 
 	if success then
-		print(util.dump(result))
-		print(util.dumpJSON(result))
+		print(util.dump(result, true, true))
+
+		local treeFile = io.open("tree.json", "w")
+		if treeFile then
+			treeFile:write(util.dumpJSON(result, false) .. "\n")
+			treeFile:close()
+		end
+
+		print("")
+
+		local code = codegen.block(result, false)
+		print(code)
+		local outFile = io.open("output.lua", "w")
+		if outFile then
+			outFile:write(code)
+			outFile:close()
+		end
 	else
 		print(result)
 	end

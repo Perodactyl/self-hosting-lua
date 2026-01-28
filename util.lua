@@ -1,13 +1,68 @@
 local util = {}
 
-function util.formatIdentifier(input, color)
-	if color == false then return input end
-	return '\x1b[38;2;180;190;254m' .. input .. '\x1b[39m'
-end
+local truncationIndicator = "\x1b[40m...\x1b[49m"
 
-function util.formatString(input, color)
-	if color == false then return '"' .. input .. '"' end
-	return '\x1b[32m"' .. input .. '"\x1b[39m'
+---@param input string
+---@param color boolean
+---@param allowTruncation boolean
+function util.formatString(input, color, allowTruncation)
+	local fullLength = #input
+	local wasTruncated = false
+	if allowTruncation then
+		input = input:sub(1,80)
+		wasTruncated = #input < fullLength
+	end
+	-- Any part beginning with \x1b is stripped if color is disabled.
+	local outputParts = {'\x1b[32m', '"'}
+	local lastPrintableSection = 0
+	while true do
+		local printableStart,printableEnd = input:find("[ -~]+", lastPrintableSection+1)
+		if printableStart == nil or printableEnd == nil then break end
+
+		local printable = input:sub(printableStart, printableEnd)
+		local nonprintable = input:sub(lastPrintableSection+1, printableStart-1)
+
+		if #nonprintable > 0 then table.insert(outputParts, "\x1b[38;2;203;166;247m") end
+
+		for i = 1,#nonprintable do
+			local char = nonprintable:sub(i,i)
+			local substitute = string.format("\\%03o", char:byte())
+
+			if char == "\a" then substitute = "\\a" end
+			if char == "\b" then substitute = "\\b" end
+			if char == "\f" then substitute = "\\f" end
+			if char == "\n" then substitute = "\\n" end
+			if char == "\r" then substitute = "\\r" end
+			if char == "\t" then substitute = "\\t" end
+			if char == "\v" then substitute = "\\v" end
+			if char == "\\" then substitute = "\\\\" end
+			if char == "\"" then substitute = "\\\"" end
+
+			table.insert(outputParts, substitute)
+		end
+
+		if #nonprintable > 0 then table.insert(outputParts, "\x1b[32m") end
+		table.insert(outputParts, printable)
+		lastPrintableSection = printableEnd
+	end
+
+	table.insert(outputParts, "\"")
+	table.insert(outputParts, "\x1b[39m")
+
+	if wasTruncated and color then table.insert(outputParts, truncationIndicator) end
+	if wasTruncated and not color then table.insert(outputParts, "...") end
+
+	local printedParts = {}
+	if color == false then
+		for _,v in ipairs(outputParts) do
+			if v:sub(1,1) ~= "\x1b" then
+				table.insert(printedParts, v)
+			end
+		end
+	else
+		printedParts = outputParts
+	end
+	return table.concat(printedParts, "")
 end
 
 function util.formatLiteral(input, color)
@@ -17,27 +72,76 @@ end
 
 function util.formatKeyword(input, color)
 	if color == false then return tostring(input) end
-	return '\x1b[38;2;203;166;247m' .. tostring(input) .. '\x1b[39m'
+	return '\x1b[38;2;203;166;247;3m' .. tostring(input) .. '\x1b[39;23m'
 end
 
-function util.dump(tbl, color)
+function util.formatIdentifier(input, color)
+	if color == false then return input end
+	return '\x1b[38;2;180;190;254;4m' .. input .. '\x1b[39;24m'
+end
+
+---@param tbl any
+---@param color? boolean
+---@param pretty? boolean
+function util.dump(tbl, color, pretty)
 	if color == nil then color = true end
+	local prettyLn = pretty and "\n" or ""
+	local prettyLnT = pretty and "\n\t" or ""
+	local prettySp = pretty and " " or ""
 
 	if type(tbl) == "table" then
 		local out = "{"
-		for k,v in pairs(tbl) do
-			local keyStr
-			if type(k) == "string" and string.match(k, "^[a-zA-Z][a-zA-Z0-9]+$") then
-				keyStr = util.formatIdentifier(k, color)
-			else
-				keyStr = '[' .. util.dump(k, color) .. ']'
-			end
-			out = out .. keyStr .. "=" .. util.dump(v, color)
-			if next(tbl,k) ~= nil then out = out .. ", " end
+
+		local keys = {}
+		for k in pairs(tbl) do
+			table.insert(keys, k)
 		end
-		return out .. "}"
+
+		table.sort(keys, function(a,b)
+			if type(a) == "number" then
+				return type(b) ~= "number" or a < b
+			end
+			return type(a) == "string" and type(b) == "string" and a < b
+		end)
+
+		for i,k in ipairs(keys) do
+			local v = tbl[k]
+
+			local keyStr
+			if i == k then
+				keyStr = ""
+			elseif type(k) == "string" and string.match(k, "^[a-zA-Z][a-zA-Z0-9]+$") then
+				keyStr = util.formatIdentifier(k, color) .. prettySp .. "=" .. prettySp
+			else
+				keyStr = '[' .. util.dump(k, color) .. ']' .. prettySp .. "=" .. prettySp
+			end
+
+			local valStr = util.dump(v, color, pretty)
+			if pretty then
+				local lines = {}
+				for line in valStr:gmatch("[^\n]+") do
+					table.insert(lines, line)
+				end
+				valStr = table.concat(lines, "\n\t")
+			end
+
+			out = out .. prettyLnT .. keyStr .. valStr
+			if i < #keys then out = out .. ", " end
+			didNewLine = true
+		end
+		out = out .. (didNewLine and prettyLn or "") .. "}"
+
+		-- if pretty then
+		-- 	local lines = {}
+		-- 	for line in out:gmatch("[^\n]+") do
+		-- 		table.insert(lines, line)
+		-- 	end
+		-- 	out = table.concat()
+		-- end
+
+		return out
 	elseif type(tbl) == "string" then
-		return util.formatString(tbl, color)
+		return util.formatString(tbl, color, true)
 	elseif type(tbl) == "nil" or type(tbl) == "number" or type(tbl) == "boolean" then
 		return util.formatLiteral(tbl, color)
 	else
@@ -45,23 +149,52 @@ function util.dump(tbl, color)
 	end
 end
 
-function util.dumpJSON(tbl)
+function util.isArray(tbl)
+	local mt = getmetatable(tbl)
+	if type(mt) == "table" and type(mt.__isObject) ~= "nil" then
+		return false
+	end
+
+	local keys = {}
+	for k in pairs(tbl) do
+		table.insert(keys, k)
+	end
+	for i,k in ipairs(keys) do
+		if i ~= k then return false end
+	end
+
+	return true
+end
+
+function util.dumpJSON(tbl, color)
 	if type(tbl) == "table" then
-		local output = "{"
-		for k,v in pairs(tbl) do
-			output = output .. '"' .. tostring(k) .. '":' .. util.dumpJSON(v)
-			if next(tbl,k) ~= nil then output = output .. "," end
+		if util.isArray(tbl) then
+			local output = "["
+			for i,v in ipairs(tbl) do
+				output = output .. util.dumpJSON(v, color)
+				if i ~= #tbl then output = output .. "," end
+			end
+			output = output .. "]"
+			return output
+		else
+			local output = "{"
+			for k,v in pairs(tbl) do
+				output = output
+					.. util.formatIdentifier('"' .. k .. '"', color)
+					.. ':'
+					.. util.dumpJSON(v, color)
+
+				if next(tbl,k) ~= nil then output = output .. "," end
+			end
+			output = output .. "}"
+			return output
 		end
-		output = output .. "}"
-		return output
 	elseif type(tbl) == "string" then
-		return '"' .. tbl .. '"'
-	elseif type(tbl) == "number" then
-		return tostring(tbl)
-	elseif type(tbl) == "boolean" then
-		return tostring(tbl)
+		return util.formatString(tbl, color, false)
+	elseif type(tbl) == "number" or type(tbl) == "boolean" then
+		return util.formatLiteral(tbl, color)
 	elseif type(tbl) == "nil" then
-		return "null"
+		return util.formatKeyword("null", color)
 	end
 end
 
@@ -81,19 +214,31 @@ end
 
 ---@param a any
 ---@param b any
+---@param match "a" | "b" | false When set to A, the first parameter can have keys not present in B. Likewise for B.
 ---@return boolean
-function util.deepEq(a, b)
+function util.deepEq(a, b, match)
 	if type(a) == "table" and type(b) == "table" then
-		local discoveredInA = {}
-		for k,v in pairs(a) do
-			table.insert(discoveredInA, k)
-			if not util.deepEq(v, b[k]) then
+		local primary = a
+		local secondary = b
+		if match == "b" then
+			primary = b
+			secondary = a
+		end
+
+		local discoveredInPrimary = {}
+
+		for k,v in pairs(primary) do
+			table.insert(discoveredInPrimary, k)
+			if not util.deepEq(v, secondary[k], match) then
 				return false
 			end
 		end
-		for k,v in pairs(b) do
-			if not util.hasV(discoveredInA, k) then
-				return false
+
+		if not match then
+			for k in pairs(secondary) do
+				if not util.hasV(discoveredInPrimary, k) then
+					return false
+				end
 			end
 		end
 		return true
@@ -121,11 +266,21 @@ end
 
 ---@generic T
 ---@param next fun(): T
+---@param j? integer
+---@param truncationIndicator? T
 ---@return T[]
-function util.collect(next)
+function util.collect(next, j, truncationIndicator)
 	local output = {}
+	local i = 1
 	while true do
 		local value = next()
+		i = i + 1
+		if j ~= nil and i > j then
+			if truncationIndicator ~= nil then
+				table.insert(output, truncationIndicator)
+			end
+			break
+		end
 		if value ~= nil then
 			table.insert(output, value)
 		else
@@ -161,7 +316,31 @@ local function tableDefaultFormatter(key, row, color)
 			return util.dump(key, color)
 		end
 	end
+	if type(row[key]) == "string" then
+		return util.formatString(row[key], color, true)
+	end
 	return util.dump(row[key], color)
+end
+
+function util.tokenListFormatter(key, row, color)
+	if row == nil then return nil end
+
+	if row.type == "..." then
+		if color then return truncationIndicator
+		else return "..." end
+	end
+
+	if key == "type" then
+		return util.formatLiteral(util.toCase(tostring(row[key]), "SCREAMING_SNAKE_CASE"), color)
+	end
+
+	if key == "value" then
+		if row.type == "keyword" then return util.formatKeyword(row.value, color) end
+		if row.type == "identifier" then return util.formatIdentifier(row.value, color) end
+		if row.type == "symbol" then return tostring(row.value) end
+		if row.type == "operator" then return tostring(row.value) end
+		if row.type == "assign" then return tostring(row.value) end
+	end
 end
 
 ---@generic K,V
@@ -224,7 +403,7 @@ function util.table(values, columnTitles, formatter)
 		end
 		for _,col in ipairs(columns) do
 			if #col.members < i then
-				table.insert(col.members, { value = "", width = 0 })
+				table.insert(col.members, { value = "", width = 1 })
 			end
 		end
 	end

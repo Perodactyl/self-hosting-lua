@@ -26,8 +26,11 @@ function Parser:parseBlock(lastToken, ...)
 
 	while not self.tokenStream:isDone() and not self.tokenStream:eq(lastToken, ...) do
 		local statement = self:parseStatement()
+		print("Parsed " .. util.dump(statement, true, true))
+		-- print(util.dumpJSON(statement))
+		if statement == nil then break end
 		if statement.type == "return" then
-			returnStatement = statement
+			returnStatement = statement.values
 		elseif returnStatement ~= nil then
 			error("Return before end of block")
 		else
@@ -52,6 +55,7 @@ function Parser:parseStatement()
 			if not variables then return nil end
 
 			local assign = self.tokenStream:next()
+			if assign == nil then return end
 			if assign.type ~= "assign" then return nil end
 
 			local values = self:parseSequence(self.parseExpression, {type="symbol",value=","})
@@ -61,7 +65,9 @@ function Parser:parseStatement()
 		end,
 
 		function() --call
-			return (self:parseFunctionCall())
+			local callee = self:parsePrefixExpression()
+			if callee == nil then return end
+			return (self:parseFunctionCall(callee))
 		end,
 
 		function() -- do block
@@ -89,15 +95,17 @@ function Parser:parseStatement()
 
 			while true do
 				local lastSymbol = self.tokenStream:next()
+				if lastSymbol == nil then break end
+
 				if lastSymbol.value == "elseif" then
-					local condition = self:parseExpression()
+					local elseifCondition = self:parseExpression()
 					if not self.tokenStream:nextIfEq({type="keyword",value="then"}) then return nil end
-					local body = self:parseBlock(
+					local elseifBody = self:parseBlock(
 						{type="keyword",value="end"},
 						{type="keyword",value="elseif"},
 						{type="keyword",value="else"}
 					)
-					table.insert(elseifs, {condition=condition,body=body})
+					table.insert(elseifs, {condition=elseifCondition,body=elseifBody})
 				elseif lastSymbol.value == "else" then
 					elseBody = self:parseBlock({type="keyword",value="end"})
 					self.tokenStream:next() -- skip end kw
@@ -120,6 +128,7 @@ function Parser:parseStatement()
 			if not self.tokenStream:nextIfEq({type="keyword",value="for"}) then return nil end
 
 			local name = self.tokenStream:next()
+			if name == nil then return nil end
 			if name.type ~= "identifier" then return nil end
 
 			if not self.tokenStream:nextIfEq({type="assign",value="="}) then return nil end
@@ -138,7 +147,7 @@ function Parser:parseStatement()
 
 			return {
 				type = "forRange",
-				iterVar = name,
+				iterVar = name.value,
 				min = min,
 				max = max,
 				step = step,
@@ -166,7 +175,14 @@ function Parser:parseStatement()
 			end
 
 			if not self.tokenStream:nextIfEq({type="symbol",value="("}) then return nil end
-			local parameters = self:parseSequence(self:generateTokenGrabber("identifier",true),{type="symbol",value=")"})
+			local parameters = self:parseSequence(function()
+				local token = self.tokenStream:peek()
+				if token ~= nil and token.type == "identifier" then
+					self.tokenStream:next()
+					return token.value --[[@as string]]
+				end
+				return nil
+			end, {type="symbol",value=")"})
 			-- TODO rest parameter
 
 			-- if not self.tokenStream:nextIfEq({type="symbol",value=")"}) then return nil end
@@ -184,15 +200,20 @@ function Parser:parseStatement()
 		end,
 		function() --return
 			if not self.tokenStream:nextIfEq({type="keyword",value="return"}) then return nil end
-			local returnValue = self:parseExpression()
+			local returnValues = self:parseExpression()
 			return {
 				type = "return",
-				value = returnValue,
+				values = {returnValues},
 			}
 		end,
 
 		function()
-			error("statement starting with remaining: " .. util.dump(util.collect(function() return self.tokenStream:next() end)))
+			util.table(util.collect(
+				function() return self.tokenStream:next() end,
+				15,
+				{type="...",value="..."}
+			), {"type","value"}, util.tokenListFormatter)
+			error("Unhandled statement from above token list")
 		end
 	))
 end
@@ -206,8 +227,8 @@ end
 function Parser:parsePrimary()
 	return self.tokenStream:scope(
 		function()
-			if self.tokenStream:isDone() then return nil end
 			local token = self.tokenStream:next()
+			if token == nil then return nil end
 			if token.type == "nilLiteral" then
 				return {
 					type = "nil",
@@ -216,8 +237,8 @@ function Parser:parsePrimary()
 			return nil, "Not a nil literal"
 		end,
 		function()
-			if self.tokenStream:isDone() then return nil end
 			local token = self.tokenStream:next()
+			if token == nil then return nil end
 			if token.type == "boolLiteral" then
 				return {
 					type = "bool",
@@ -227,8 +248,8 @@ function Parser:parsePrimary()
 			return nil, "Not a bool literal"
 		end,
 		function()
-			if self.tokenStream:isDone() then return nil end
 			local token = self.tokenStream:next()
+			if token == nil then return nil end
 			if token.type == "number" then
 				return {
 					type = "number",
@@ -238,8 +259,8 @@ function Parser:parsePrimary()
 			return nil, "Not a number literal"
 		end,
 		function()
-			if self.tokenStream:isDone() then return nil end
 			local token = self.tokenStream:next()
+			if token == nil then return nil end
 			if token.type == "string" then
 				return {
 					type = "string",
@@ -258,7 +279,7 @@ function Parser:parsePrimary()
 			return nil, "Function Expressions not implemented"
 		end,
 		function()
-			return self:parsePrefixExpression(true, true)
+			return self:parsePrefixExpression()
 		end
 	)
 end
@@ -289,13 +310,13 @@ local function generatePrecedenceFunc(children, operators)
 		local expr = children(self)
 
 		while self.tokenStream:eq(table.unpack(operators)) do
-			local operator = self.tokenStream:next()
+			local operator = self.tokenStream:next() --[[@as Token]]
 			local right = children(self)
 			if expr == nil or operator == nil or right == nil then return nil end
 			expr = {
 				type = "binary",
 				left = expr,
-				operator = operator.value,
+				operator = operator.value --[[@as string]],
 				right = right,
 			}
 		end
@@ -317,6 +338,7 @@ Parser.parseTerm = generatePrecedenceFunc(
 	{
 		{type="operator",value="+"},
 		{type="operator",value="-"},
+		{type="operator",value=".."},
 	}
 )
 Parser.parseComparison = generatePrecedenceFunc(
@@ -335,25 +357,9 @@ Parser.parseEquality = generatePrecedenceFunc(
 		{type="operator",value="~="},
 	}
 )
----@param allowCalls? boolean
----@param allowAccesses? boolean
 ---@return PrefixExpression | nil
-function Parser:parsePrefixExpression(allowCalls, allowAccesses)
+function Parser:parsePrefixExpression()
 	return (self.tokenStream:scope(
-		function()
-			if allowCalls == false then return nil end
-			local call = self:parseFunctionCall()
-			if call then
-				return {type="prefix",subtype="call",call=call}
-			end
-		end,
-		function()
-			if allowAccesses == false then return nil end
-			local access = self:parseAccess()
-			if access then
-				return {type="prefix",subtype="access",key=access}
-			end
-		end,
 		function()
 			if self.tokenStream:nextIfEq({type="symbol",value="("}) then
 				local exp = self:parseExpression()
@@ -361,76 +367,75 @@ function Parser:parsePrefixExpression(allowCalls, allowAccesses)
 					return {type="prefix",subtype="group",inner=exp}
 				end
 			end
-		end
-	))
-end
-
----@return Access | nil
-function Parser:parseAccess()
-	return (self.tokenStream:scope(
-		-- function()
-		-- 	local output
-		-- 	local ident = self.tokenStream:next()
-		-- 	if ident.type == "identifier" then
-		-- 		output = {
-		-- 			type = "ident",
-		-- 			inner = ident,
-		-- 		}
-		-- 	else return nil end
-		-- 	while not self.tokenStream:isDone() do
-		-- 		if self.tokenStream:nextIfEq({type="symbol",value="."}) then
-		-- 			output = {
-		-- 				type = "dot",
-		-- 				left = output,
-		-- 				sub = self.tokenStream:next()
-		-- 			}
-		-- 		else
-		-- 			break
-		-- 		end
-		-- 	end
-		-- 	return output
-		-- end,
-		function()
-			local pre = self:parsePrefixExpression(false, false)
-			if not self.tokenStream:nextIfEq({type="symbol",value="."}) then return nil end
-			local sub = self.tokenStream:next()
-			if sub.type == "identifier" then
-				return {
-					type = "dot",
-					left = pre,
-					sub = sub,
-				}
-			end
 		end,
 		function()
-			local pre = self:parsePrefixExpression(false, false)
-			if not self.tokenStream:nextIfEq({type="symbol",value="["}) then return nil end
-			local inner = self:parseExpression()
-			if not self.tokenStream:nextIfEq({type="symbol",value="]"}) then return nil end
-			return {
-				type = "index",
-				left = pre,
-				sub = inner,
-			}
-		end,
-		function()
-			if self.tokenStream:isDone() then return end
 			local ident = self.tokenStream:next()
-			if ident.type == "identifier" then
-				return {
-					type = "ident",
-					inner = ident,
-				}
+			if ident == nil then return end
+			---@cast ident Token
+			if ident.type ~= "identifier" then return end
+
+			local access = {
+				type = "prefix",
+				subtype = "identifier",
+				inner = ident.value --[[@as string]],
+			}
+
+			while true do
+				local value = self.tokenStream:scope(
+					function()
+						if not self.tokenStream:nextIfEq({type="symbol",value="."}) then return nil end
+						local sub = self.tokenStream:next()
+						if sub == nil then return end
+						---@cast sub Token
+						if sub.type == "identifier" then
+							return {
+								type = "prefix",
+								subtype = "dot",
+								left = access,
+								sub = sub.value,
+							}
+						end
+					end,
+					function()
+						if not self.tokenStream:nextIfEq({type="symbol",value="["}) then return nil end
+						local inner = self:parseExpression()
+						if inner == nil then return end
+						if not self.tokenStream:nextIfEq({type="symbol",value="]"}) then return nil end
+						return {
+							type = "prefix",
+							subtype = "index",
+							left = access,
+							sub = inner,
+						}
+					end,
+					function()
+						return self:parseFunctionCall(access)
+					end
+				)
+				if value ~= nil then
+					access = value
+				else
+					break
+				end
 			end
+			return access
 		end
 	))
 end
 
----@return FunctionCall | nil
-function Parser:parseFunctionCall()
-	local prefix = self:parsePrefixExpression(false)
-	if prefix == nil then return nil end
+---@return Access | nil, string?
+function Parser:parseAccess()
+	local value, reason = self:parsePrefixExpression()
+	if value == nil then return nil, "Failed to parse prefix: " .. (reason or "<unknown>") end
+	if value.subtype == "dot" or value.subtype == "index" or value.subtype == "identifier" then
+		return value
+	end
+	return nil, "Value was of subtype " .. value.subtype
+end
 
+---@param prefix PrefixExpression
+---@return FunctionCall | nil
+function Parser:parseFunctionCall(prefix)
 	local output
 	while not self.tokenStream:isDone() do
 		local name
@@ -450,8 +455,8 @@ function Parser:parseFunctionCall()
 				return nil
 			end,
 			function()
-				if self.tokenStream:peek().type == "string" then
-					return {type="string",value=self.tokenStream:next().value}
+				if (self.tokenStream:peek() --[[@as Token]]).type == "string" then
+					return {type="string",value=self.tokenStream:next().value --[[@as string]]}
 				end
 				return nil
 			end,
@@ -497,25 +502,6 @@ function Parser:parseSequence(memberParser, separator)
 	end
 	if #output == 0 then return nil end
 	return output
-end
-
----@param type string
----@param strip false if true, returns value
----@return fun(self: Parser): Token|nil
----@overload fun(self: Parser, type: string, strip: true): fun(self: Parser): string|number|boolean|nil
-function Parser:generateTokenGrabber(type,strip)
-	return function(self)
-		if self.tokenStream:isDone() then return end
-		if self.tokenStream:peek().type == type then
-			if strip then
-				return self.tokenStream:next().value
-			else
-				return self.tokenStream:next()
-			end
-		else
-			return nil
-		end
-	end
 end
 
 return Parser
