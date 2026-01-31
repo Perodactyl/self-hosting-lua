@@ -1,7 +1,7 @@
 local util = require("util")
 local LazyStream = require("lazyStream")
 
----@alias Token ({ type: "string", value: string } | { type: "number", value: number } | { type: "keyword", value: Keyword } | { type: "operator", value: Operator } | { type: "symbol", value: Symbol } | { type: "assign", value: Assign } | { type: "identifier", value: string }) & { supertype: "token", index: integer }
+---@alias Token { type: "string", value: string, [any]:any } | { type: "number", value: number, [any]:any } | { type: "keyword", value: Keyword, [any]:any } | { type: "operator", value: Operator, [any]:any } | { type: "symbol", value: Symbol, [any]:any } | { type: "assign", value: Assign, [any]:any } | { type: "identifier", value: string, [any]:any }
 ---@alias Operator UnaryOperator | BinaryOperator
 ---@alias Keyword "break" | "do" | "else" | "elseif" | "end" | "for" | "function" | "goto" | "if" | "in" | "local" | "repeat" | "return" | "then" | "until" | "while" | "local"
 ---@alias Symbol "{" | "}" | "(" | ")" | "[" | "]" | "," | "." | ":" | "::" | ";"
@@ -278,40 +278,6 @@ function Lexer:parseNextToken()
 				else break end
 			end
 			return { type = "identifier", value = ident }
-		end,
-		function()
-			if self.charStream:isDone() then return nil end
-			if not self.charStream:peek():match("[0-9.]") then return nil end
-
-			while true do
-				local char
-				if isFirst then
-					char = firstChar
-					isFirst = false
-				else
-					char = self.charStream:peek()
-				end
-				print(mode, char)
-				if char == nil then break end
-
-				if mode == "dec" and char:match("[0-9]") then
-					value = value * 10 + tonumber(self.charStream:next())
-				elseif mode == "dec" and char == "." then
-					self.charStream:next()
-					mode = "decFraction"
-					place = 0
-				elseif mode == "decFraction" and char:match("[0-9]") then
-					place = place - 1
-					value = value + (tonumber(self.charStream:next()) * 10^place)
-				elseif mode == "hex" and char:match("[0-9a-fA-F]") then
-					value = 16 * value + tonumber(self.charStream:next(), 16)
-				else
-					break
-				end
-			end
-
-			-- TODO Support decimal and hexadecimal scientific notation
-			return { type = "number", value = value }
 		end,
 		function()
 			if not self.charStream:isDone() then

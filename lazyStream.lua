@@ -1,8 +1,3 @@
-local original_print = print
-local function print(...)
-	-- original_print(debug.traceback())
-	original_print(...)
-end
 local util = require("util")
 
 ---Temporary fix because LuaLS doesn't understand that class generics should be visible in fields.
@@ -149,10 +144,11 @@ end
 -- local DEBUG_PRINT_DEPTH = 0
 
 ---Calls fun within a save/recall block. If fun returns nil, recalls. Otherwise, continues. When passed multiple functions, calls them in order and returns the first non-nil result. Callbacks should not have side effects, otherwise non-cannon syntax trees (trees that are somewhat valid and overlap with the cannon result) might escape.
+---Optionally, a scope name may be the first parameter. Optionally, each function can have a parameter before it to name it.
 ---@generic T
----@param fun1 fun(): T|nil, string?
----@param ... fun(): T|nil, string?
----@overload fun(desc:string, fun1: (fun(): T|nil, string?), ...: (fun(): T|nil, string?)): T|nil, string
+---@param fun1 string|function
+---@param fun2 string|function
+---@param ... string|function
 ---@return T|nil, string
 function LazyStream:scope(fun1,fun2,...)
 	local functions

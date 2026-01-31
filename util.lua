@@ -1,6 +1,6 @@
 local util = {}
 
-local truncationIndicator = "\x1b[40m...\x1b[49m"
+local defaultTruncationIndicator = "\x1b[40m...\x1b[49m"
 
 ---@param input string
 ---@param color boolean
@@ -56,7 +56,7 @@ function util.formatString(input, color, allowTruncation)
 	table.insert(outputParts, "\"")
 	table.insert(outputParts, "\x1b[39m")
 
-	if wasTruncated and color then table.insert(outputParts, truncationIndicator) end
+	if wasTruncated and color then table.insert(outputParts, defaultTruncationIndicator) end
 	if wasTruncated and not color then table.insert(outputParts, "...") end
 
 	local printedParts = {}
@@ -206,14 +206,14 @@ function util.dumpJSON(tbl, color)
 end
 
 function util.hasK(tbl, key)
-	for k,v in pairs(tbl) do
+	for k,_ in pairs(tbl) do
 		if k == key then return true end
 	end
 	return false
 end
 
 function util.hasV(tbl, val)
-	for k,v in pairs(tbl) do
+	for _,v in pairs(tbl) do
 		if v == val then return true end
 	end
 	return false
@@ -221,7 +221,7 @@ end
 
 ---@param a any
 ---@param b any
----@param match "a" | "b" | false When set to A, the first parameter can have keys not present in B. Likewise for B.
+---@param match "a" | "b" | false | nil When set to A, the first parameter can have keys not present in B. Likewise for B.
 ---@return boolean
 function util.deepEq(a, b, match)
 	if type(a) == "table" and type(b) == "table" then
@@ -333,7 +333,7 @@ function util.tokenListFormatter(key, row, color)
 	if row == nil then return nil end
 
 	if row.type == "..." then
-		if color then return truncationIndicator
+		if color then return defaultTruncationIndicator
 		else return "..." end
 	end
 
@@ -468,9 +468,9 @@ function util.table(values, columnTitles, formatter)
 
 		table.insert(outputLines, line)
 
-		if row ~= #values then
+		-- if row ~= #values then
 			-- print(frameLine)
-		end
+		-- end
 	end
 	table.insert(outputLines, bottomFrameLine)
 	return table.concat(outputLines, "\n"), #bottomFrameLine, #outputLines

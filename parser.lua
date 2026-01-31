@@ -96,7 +96,6 @@ function Parser:parseStatement()
 			}
 		end,
 
-		---@return If | nil
 		"If statement", function() --if
 			if not self.tokenStream:nextIfEq({type="keyword",value="if"}) then return nil, "No if kw" end
 			local condition, conditionReason = self:parseExpression()
@@ -184,6 +183,8 @@ function Parser:parseStatement()
 				return name.value
 			end, {type="symbol",value=","})
 
+			if not variables then return nil, variablesReason end
+
 			if not self.tokenStream:nextIfEq({type="keyword",value="in"}) then return nil, "No in kw" end
 
 			local iterator, iteratorReason = self:parseExpression()
@@ -235,7 +236,7 @@ function Parser:parseStatement()
 			}
 		end,
 
-		---@return FuncDef | LocalFuncDef | nil
+		---@return FuncDef | LocalFuncDef | nil, string?
 		"Function definition statement", function() -- function definition
 			local localKw = self.tokenStream:nextIfEq({type="keyword",value="local"})
 			if not self.tokenStream:nextIfEq({type="keyword",value="function"}) then return nil, "No function kw" end
@@ -309,7 +310,7 @@ function Parser:parseStatement()
 	return a,b --Prevents TCO, making traceback more informative
 end
 
----@return FuncImpl
+---@return FuncImpl?, string?
 function Parser:parseFunctionDefinition()
 	if not self.tokenStream:nextIfEq({type="symbol",value="("}) then return nil, "No open paren after name" end
 	local parameters, parametersReason = self:parseSequence(function()
@@ -403,7 +404,7 @@ function Parser:parsePrimary()
 			if token.value ~= "..." then return nil, "No ellipsis" end
 			return { type="vararg" }
 		end,
-		"Function expression", function() -- TODO function expression
+		"Function expression", function()
 			if not self.tokenStream:nextIfEq({type="keyword",value="function"}) then return nil, "No function kw" end
 
 			local impl, implReason = self:parseFunctionDefinition()
@@ -428,6 +429,8 @@ function Parser:parseUnary()
 		{type="operator",value="not"}
 	) then
 		local operator = self.tokenStream:next()
+		if operator == nil then return nil, "No operator" end
+		if operator.type ~= "operator" then return nil, "Not an operator" end
 		local right = self:parseUnary()
 		return {
 			type = "unary",
@@ -724,7 +727,7 @@ function Parser:parseTableLiteral()
 end
 
 ---@generic T
----@param memberParser fun(self: Parser): T
+---@param memberParser fun(self: Parser): T|nil, string?
 ---@param separator Token
 ---@return T[]|nil, string?
 function Parser:parseSequence(memberParser, separator)

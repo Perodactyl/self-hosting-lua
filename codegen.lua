@@ -38,8 +38,19 @@ function codegen.statement(statement)
 		return kw .. table.concat(variables,",") .. " = " .. table.concat(values,",")
 	end
 	if statement.type == "call" then return codegen.call(statement) end
-	if statement.type == "funcDef" then return codegen.funcDef(statement, false) end
-	if statement.type == "localFuncDef" then return codegen.funcDef(statement,true) end
+	if statement.type == "funcDef" or statement.type == "localFuncDef" then
+		local output = statement.type == "localFuncDef" and "local function " or "function "
+		output = output .. statement.name.base
+		for _,part in statement.name.accesses do
+			output = output .. "." .. part
+		end
+		if statement.name.method then
+			output = output .. ":" .. statement.name.method
+		end
+
+		output = output .. codegen.funcImpl(statement.impl)
+		return output
+	end
 	if statement.type == "forRange" then
 		local output = "for " .. statement.iterVar .. " = "
 		output = output .. codegen.expression(statement.min) .. "," .. codegen.expression(statement.max)
@@ -120,26 +131,15 @@ function codegen.expression(expr)
 	return expr.type
 end
 
----@param def FunctionExpression | FuncDef | LocalFuncDef
----@param isLocal boolean
+---@param impl FuncImpl
 ---@return string
-function codegen.funcDef(def, isLocal)
-	local output = "function"
-	if isLocal then output = "local " .. output end
-	if def.name then
-		output = output .. " " .. def.name.base
-		for _,access in ipairs(def.name.accesses) do
-			output = output .. "." .. access
-		end
-		if def.name.method then
-			output = output .. ":" .. def.name.method
-		end
-	end
-	output = output .. "(" .. table.concat(def.parameters, ", ")
-	if def.rest then output = output .. ", ..." end
+function codegen.funcImpl(impl)
+	local output = ""
+	output = output .. "(" .. table.concat(impl.parameters, ", ")
+	if impl.rest then output = output .. ", ..." end
 	output = output .. ")\n"
 
-	output = output .. codegen.block(def.body,true)
+	output = output .. codegen.block(impl.body,true)
 	output = output .. "\nend"
 
 	return output

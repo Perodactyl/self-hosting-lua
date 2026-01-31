@@ -1,5 +1,6 @@
 -- SPDX-License-Identifier: MIT
 -- Copyright (c) 2026 Scott Lembcke and Howling Moon Software
+---@diagnostic disable
 
 local dbg
 

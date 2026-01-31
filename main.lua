@@ -1,9 +1,9 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
-local STP = require("stacktraceplus")
+-- local STP = require("stacktraceplus")
 
 local Lexer = require("lexer")
 local Parser = require("parser")
-local codegen = require("codegen")
+-- local codegen = require("codegen")
 local autotest = require("autotest")
 local util = require("util")
 
