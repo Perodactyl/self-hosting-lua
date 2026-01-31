@@ -25,7 +25,8 @@ end
 ---@param statement Statement
 ---@return string
 function codegen.statement(statement)
-	if statement.type == "assignment" then
+	if statement.type == "assignment" or statement.type == "localAssignment" then
+		local kw = statement.type == "localAssignment" and "local " or ""
 		local variables = {}
 		for _,access in ipairs(statement.variables) do
 			table.insert(variables, codegen.prefix(access))
@@ -34,7 +35,7 @@ function codegen.statement(statement)
 		for _,expr in ipairs(statement.values) do
 			table.insert(values, codegen.expression(expr))
 		end
-		return table.concat(variables,",") .. " = " .. table.concat(values,",")
+		return kw .. table.concat(variables,",") .. " = " .. table.concat(values,",")
 	end
 	if statement.type == "call" then return codegen.call(statement) end
 	if statement.type == "funcDef" then return codegen.funcDef(statement, false) end

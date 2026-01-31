@@ -15,12 +15,19 @@ function util.formatString(input, color, allowTruncation)
 	-- Any part beginning with \x1b is stripped if color is disabled.
 	local outputParts = {'\x1b[32m', '"'}
 	local lastPrintableSection = 0
-	while true do
-		local printableStart,printableEnd = input:find("[ -~]+", lastPrintableSection+1)
-		if printableStart == nil or printableEnd == nil then break end
+	while lastPrintableSection < #input do
+		local printableStart,printableEnd = input:find("[! #-~]+", lastPrintableSection+1)
 
-		local printable = input:sub(printableStart, printableEnd)
-		local nonprintable = input:sub(lastPrintableSection+1, printableStart-1)
+		local printable, nonprintable
+		if printableStart == nil or printableEnd == nil then
+			printable = ""
+			nonprintable = input:sub(lastPrintableSection+1)
+			printableEnd = #input
+		else
+			printable = input:sub(printableStart, printableEnd)
+			nonprintable = input:sub(lastPrintableSection+1, printableStart-1)
+		end
+
 
 		if #nonprintable > 0 then table.insert(outputParts, "\x1b[38;2;203;166;247m") end
 
@@ -110,7 +117,7 @@ function util.dump(tbl, color, pretty)
 			local keyStr
 			if i == k then
 				keyStr = ""
-			elseif type(k) == "string" and string.match(k, "^[a-zA-Z][a-zA-Z0-9]+$") then
+			elseif type(k) == "string" and string.match(k, "^[a-zA-Z_][a-zA-Z0-9_]+$") then
 				keyStr = util.formatIdentifier(k, color) .. prettySp .. "=" .. prettySp
 			else
 				keyStr = '[' .. util.dump(k, color) .. ']' .. prettySp .. "=" .. prettySp
@@ -127,9 +134,8 @@ function util.dump(tbl, color, pretty)
 
 			out = out .. prettyLnT .. keyStr .. valStr
 			if i < #keys then out = out .. ", " end
-			didNewLine = true
 		end
-		out = out .. (didNewLine and prettyLn or "") .. "}"
+		out = out .. (#keys > 0 and prettyLn or "") .. "}"
 
 		-- if pretty then
 		-- 	local lines = {}
@@ -340,6 +346,7 @@ function util.tokenListFormatter(key, row, color)
 		if row.type == "symbol" then return tostring(row.value) end
 		if row.type == "operator" then return tostring(row.value) end
 		if row.type == "assign" then return tostring(row.value) end
+		if row.type == "nilLiteral" then return util.formatLiteral("nil", color) end
 	end
 end
 
@@ -403,7 +410,7 @@ function util.table(values, columnTitles, formatter)
 		end
 		for _,col in ipairs(columns) do
 			if #col.members < i then
-				table.insert(col.members, { value = "", width = 1 })
+				table.insert(col.members, { value = "<nil>", width = 6 })
 			end
 		end
 	end

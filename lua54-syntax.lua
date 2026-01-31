@@ -136,19 +136,20 @@ do
 	---@field body Block
 
 	do
-		---@class FuncDef
-		---@field type "funcDef"
-		---@field name FuncName
+		---@class FuncImpl
 		---@field parameters Identifier[]
 		---@field rest boolean
 		---@field body Block
 
+		---@class FuncDef
+		---@field type "funcDef"
+		---@field name FuncName
+		---@field impl FuncImpl
+
 		---@class LocalFuncDef
 		---@field type "localFuncDef"
-		---@field name FuncName
-		---@field parameters Identifier[]
-		---@field rest boolean
-		---@field body Block
+		---@field name Identifier
+		---@field impl FuncImpl
 
 		--- funcname ::= Name {'.' Name} [':' Name], so a.b:c populates all 3 fields
 		---@class FuncName
@@ -187,8 +188,7 @@ do
 
 	---@class FunctionExpression
 	---@field type "funcDef"
-	---@field parameters Identifier[]
-	---@field body Block
+	---@field impl FuncImpl
 
 	do
 		---@alias PrefixExpression PrefixAccessExpression | PrefixCallExpression | PrefixGroupExpression
