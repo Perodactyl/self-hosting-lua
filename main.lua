@@ -4,6 +4,7 @@ local STP = require("stacktraceplus")
 local Lexer = require("lexer")
 local Parser = require("parser")
 local codegen = require("codegen")
+local autotest = require("autotest")
 local util = require("util")
 
 local tests = {
@@ -59,28 +60,63 @@ local tests = {
 				name = "Nil Literal",
 				source = [[nil]],
 				parser = "parseExpression",
+				result = {type="nil"}
 			},
 			{
 				name = "Bool Literal",
 				source = [[true]],
 				parser = "parseExpression",
+				result = {type="bool",value=true}
 			},
 			{
-				name = "Number Literal",
-				source = [[0.5]],
+				name = "Integer Literal",
+				source = [[321]],
 				parser = "parseExpression",
+				result = {type="number",value=321}
+			},
+			{
+				name = "Float Literal",
+				source = [[3.14]],
+				parser = "parseExpression",
+				result = {type="number",value=3.14}
+			},
+			{
+				name = "Decimal Scientific Notation",
+				source = [[1e-3]],
+				parser = "parseExpression",
+				result = {type="number",value=0.001}
+			},
+			{
+				name = "Hexadecimal Integer Literal",
+				source = [[0xff]],
+				parser = "parseExpression",
+				result = {type="number",value=255}
+			},
+			{
+				name = "Hexadecimal Float Literal",
+				source = [[0xff.a]],
+				parser = "parseExpression",
+				result = {type="number",value=255.625}
+			},
+			{
+				name = "Hexadecimal Scientific Notation",
+				source = [[0x1p9]],
+				parser = "parseExpression",
+				result = {type="number",value=512}
 			},
 			{
 				name = "String Literal",
 				source = [["Hello, World!"]],
 				parser = "parseExpression",
+				result = {type="string",value="Hello, World!"}
 			},
 			{
 				name = "Long String Literal",
 				source = [[ [=[Hello, "World!"]=] ]],
 				parser = "parseExpression",
+				result = {type="string",value=[=[Hello, "World!"]=]}
 			},
-			-- add tests for escape sequences and nested long strings
+			-- TODO add tests for escape sequences and nested long strings
 			{
 				name = "Vararg",
 				source = [[...]],
@@ -95,15 +131,7 @@ local tests = {
 				name = "Table Literal",
 				source = [[{key=value}]],
 				parser = "parseExpression",
-				result = {
-					type = "table",
-					value = {
-						{
-							key={type="string",value="key"},
-							value={type="prefix",subtype="identifier",inner="value"},
-						}
-					}
-				},
+				autotest = true,
 			},
 		},
 	},
@@ -114,110 +142,37 @@ local tests = {
 				name = "Identifier Access",
 				source = [[testIdentifier]],
 				parser = "parsePrefixExpression",
-				result = {type="prefix",subtype="identifier",inner="testIdentifier"}
+				autotest = true,
 			},
 			{
 				name = "Dot Access",
 				source = [[table.insert]],
 				parser = "parsePrefixExpression",
-				result = {
-					type="prefix",subtype="dot",
-					left = {type="prefix",subtype="identifier",inner="table"},
-					sub = "insert",
-				}
+				autotest = true,
 			},
 			{
 				name = "Index Access",
 				source = [=[elements[i]]=],
 				parser = "parsePrefixExpression",
-				result = {
-					type="prefix",subtype="index",
-					left = {type="prefix",subtype="identifier",inner="elements"},
-					sub = {type="prefix",subtype="identifier",inner="i"},
-				}
+				autotest = true,
 			},
 			{
 				name = "Call",
 				source = [[table.insert("a")]],
 				parser = "parsePrefixExpression",
-				result = {
-					type = "prefix",
-					subtype = "call",
-					call = {
-						type = "call",
-						args = {
-							{ type = "string", value = "a" },
-						},
-						callee = {
-							type = "prefix",
-							subtype = "dot",
-							left = {
-								inner = "table",
-								subtype = "identifier",
-								type = "prefix",
-							},
-							sub = "insert",
-						},
-					},
-				},
+				autotest = true,
 			},
 			{
 				name = "Group",
 				source = [[(1+1)]],
 				parser = "parsePrefixExpression",
-				result = {
-					type = "prefix",
-					subtype = "group",
-					inner = {
-						type = "binary",
-						left = {type="number",value=1},
-						operator = "+",
-						right = {type="number",value=1},
-					},
-				},
+				autotest = true,
 			},
 			{
 				name = "IIFE",
 				source = [[(function() print("hi") end)()]],
 				parser = "parsePrefixExpression",
-				result = {
-					type = "prefix",
-					subtype = "call",
-					call = {
-						type = "call",
-						callee = {
-							type = "prefix",
-							subtype = "group",
-							inner = {
-								type = "funcDef",
-								impl = {
-									parameters = {},
-									rest = false,
-									body = {
-										type = "block",
-										statements = {
-											{
-												args = {
-													{
-														type = "string",
-														value = "hi"
-													}
-												},
-												callee = {
-													inner = "print",
-													subtype = "identifier",
-													type = "prefix"
-												},
-												type = "call"
-											}
-										},
-									},
-								},
-							},
-						},
-						args = {},
-					},
-				},
+				autotest = true,
 			},
 		},
 	},
@@ -226,7 +181,7 @@ local tests = {
 		members = {
 			{
 				name = "Negation",
-				source = [[-3]],
+				source = [[- 3]],
 				parser = "parseExpression",
 				result = {type="unary",operator="-",right={type="number",value=3}},
 			},
@@ -257,116 +212,43 @@ local tests = {
 				name = "Equality",
 				source = "input == 'test'",
 				parser = "parseExpression",
-				result = {
-					type = "binary",
-					left = {type="prefix",subtype="identifier",inner="input"},
-					operator = "==",
-					right = {type="string",value="test"},
-				},
+				autotest = true,
 			},
 			{
 				name = "Comparison",
 				source = "#tbl <= 3",
 				parser = "parseExpression",
-				result = {
-					type = "binary",
-					left = {
-						type="unary",operator="#",
-						right={type="prefix",subtype="identifier",inner="tbl"},
-					},
-					operator = "<=",
-					right = {type="number",value=3},
-				},
+				autotest = true,
 			},
 			{
 				name = "Term",
 				source = "1 + 2 - 3",
 				parser = "parseExpression",
-				result = {
-					type = "binary",
-					left = {
-						type="binary",operator="+",
-						left={type="number",value=1},
-						right={type="number",value=2},
-					},
-					operator = "-",
-					right = {type="number",value=3},
-				},
+				autotest = true,
 			},
 			{
 				name = "Factor",
 				source = "3 * 2 / 3 % 4 // 2",
 				parser = "parseExpression",
-				result = {
-					type = "binary", operator = "//",
-					left = {
-						type = "binary", operator = "%",
-						left = {
-							type = "binary",
-							left = {
-								type="binary",operator="*",
-								left={type="number",value=3},
-								right={type="number",value=2},
-							},
-							operator = "/",
-							right = {type="number",value=3},
-						},
-						right = {type="number",value=4},
-					},
-					right = {type="number",value=2},
-				},
+				autotest = true,
 			},
 			{
 				name = "Boolean AND",
 				source = "a < b and b < c",
 				parser = "parseExpression",
-				result = {
-					type = "binary",
-					left = {
-						type="binary",operator="<",
-						left={type="prefix",subtype="identifier",inner="a"},
-						right={type="prefix",subtype="identifier",inner="b"},
-					},
-					operator = "and",
-					right = {
-						type="binary",operator="<",
-						left={type="prefix",subtype="identifier",inner="b"},
-						right={type="prefix",subtype="identifier",inner="c"},
-					},
-				},
+				autotest = true,
 			},
 			{
 				name = "Boolean OR",
 				source = "a < b and b < c or override",
 				parser = "parseExpression",
-				result = {
-					type = "binary", operator="or",
-					left = {
-						type = "binary",
-						left = {
-							type="binary",operator="<",
-							left={type="prefix",subtype="identifier",inner="a"},
-							right={type="prefix",subtype="identifier",inner="b"},
-						},
-						operator = "and",
-						right = {
-							type="binary",operator="<",
-							left={type="prefix",subtype="identifier",inner="b"},
-							right={type="prefix",subtype="identifier",inner="c"},
-						},
-					},
-					right = {type="prefix",subtype="identifier",inner="override"},
-				},
+				autotest = true,
 			},
 			{
 				name = "Concatenation",
 				source = [["Lorem" .. "Ipsum"]],
 				parser = "parseExpression",
-				result = {
-					type="binary", operator="..",
-					left = {type="string",value="Lorem"},
-					right = {type="string",value="Ipsum"},
-				},
+				autotest = true,
 			},
 		},
 	},
@@ -377,38 +259,115 @@ local tests = {
 				name = "Simple If",
 				source = [[if a < b then swap() end]],
 				parser = "parseStatement",
-				result = {
-					type = "if",
-					condition = {
-						type = "binary",
-						left = {
-							inner = "a",
-							subtype = "identifier",
-							type = "prefix"
-						},
-						operator = "<",
-						right = {
-							inner = "b",
-							subtype = "identifier",
-							type = "prefix"
-						},
-					},
-					body = {
-						statements = {
-							{
-								args = {},
-								callee = {
-									inner = "swap",
-									subtype = "identifier",
-									type = "prefix"
-								},
-								type = "call"
-							}
-						},
-						type = "block"
-					},
-					elseifs = {},
-				},
+				autotest = true,
+			},
+			{
+				name = "If-Else",
+				source = [[if a < b then swap() else print("Not swapped") end]],
+				parser = "parseStatement",
+				autotest = true,
+			},
+			{
+				name = "If-Elseif",
+				source = [[if a < b then swap() elseif a > b then print("Greater") end]],
+				parser = "parseStatement",
+				autotest = true,
+			},
+			{
+				name = "If-Elseif-Else",
+				source = [[if a < b then swap() elseif a > b then print("Greater") else print("Equal") end]],
+				parser = "parseStatement",
+				autotest = true,
+			},
+			{
+				name = "While",
+				source = [[while #val < target do table.insert(val,#val) end]],
+				parser = "parseStatement",
+				autotest = true,
+			},
+			{
+				name = "Repeat Until",
+				source = [[repeat local block = file:read(math.huge) until block == nil]],
+				parser = "parseStatement",
+				autotest = true,
+			},
+			{
+				name = "Numeric For",
+				source = [[for i = 1,10 do print(i) end]],
+				parser = "parseStatement",
+				autotest = true,
+			},
+			{
+				name = "Numeric For with Step",
+				source = [[for i = 0,1,0.1 do print(i) end]],
+				parser = "parseStatement",
+				autotest = true,
+			},
+			{
+				name = "Iterative For",
+				source = [[for i,v in ipairs(args) do print(v) end]],
+				parser = "parseStatement",
+				autotest = true,
+			},
+			{
+				name = "Goto",
+				source = [[
+					for i = 1,10 do
+						if i % 2 == 0 then goto continue end
+						print(v)
+						
+						::continue::
+					end
+				]],
+				parser = "parseStatement",
+				autotest = true,
+			},
+			{
+				name = "Do",
+				source = [[do print("Hello, World!") end]],
+				parser = "parseStatement",
+				autotest = true,
+			},
+		},
+	},
+	{
+		groupName = "Statements",
+		members = {
+			{
+				name = "Assignment",
+				source = [[a,b,c = 1,2,3]],
+				parser = "parseStatement",
+				autotest = true,
+			},
+			{
+				name = "Local Assignment",
+				source = [[local a,b,c = 1,2,3]],
+				parser = "parseStatement",
+				autotest = true,
+			},
+			{
+				name = "Function definition",
+				source = [[function test() print("hi") end]],
+				parser = "parseStatement",
+				autotest = true,
+			},
+			{
+				name = "Function definition on a table",
+				source = [[local lib = {} function lib.test() print("hi") end]],
+				parser = "parseChunk",
+				autotest = true,
+			},
+			{
+				name = "Method definition on a table",
+				source = [[local lib = {} function lib:test() print(self) end]],
+				parser = "parseChunk",
+				autotest = true,
+			},
+			{
+				name = "Local function definition",
+				source = [[local function test() print("hi") end]],
+				parser = "parseStatement",
+				autotest = true,
 			},
 		},
 	},
@@ -432,6 +391,19 @@ local tests = {
 	-- },
 }
 
+autotest.load()
+
+for i,group in ipairs(tests) do
+	for j,test in ipairs(group.members) do
+		if test.autotest then
+			test.result = autotest.get(i .. "." .. j)
+			if test.result == nil then
+				print("\x1b[31mAutotest: Missing " .. i .. "." .. j .. "\x1b[39m")
+			end
+		end
+	end
+end
+
 local function runTest(name, test, showSuccess, alwaysPrintTestName)
 	local lexer = Lexer.new(test.source)
 	local gen = lexer:createTokenGenerator()
@@ -446,14 +418,24 @@ local function runTest(name, test, showSuccess, alwaysPrintTestName)
 
 		print("Test " .. name .. " \x1b[31;1;4mfailed\x1b[39;21;24m")
 
+
+		local remainingTokens = 0
+		while parser.tokenStream:next() ~= nil do
+			remainingTokens = remainingTokens + 1
+		end
+
 		local debugLexer = Lexer.new(test.source)
 		local debugGen = debugLexer:createTokenGenerator()
 		local tokens = util.collect(debugGen)
-		util.table(tokens, { "index", "type", "value" }, util.tokenListFormatter)
+		for i,token in ipairs(tokens) do
+			token.parsed = i <= #tokens - remainingTokens
+		end
+		print((util.table(tokens, { "index", "type", "value", "parsed" }, util.tokenListFormatter)))
+		print("")
 
 		if uncrashed then -- Code did not crash, but did not parse
 			if test.result ~= nil and not util.deepEq(test.result, result) then
-				print("Output was " .. util.dump(result,true,true) .. " but expected " .. util.dump(test.result,true,true))
+				print("Expected Result: " .. util.dump(test.result,true,true))
 			else
 				print(resultReason)
 			end
@@ -461,30 +443,39 @@ local function runTest(name, test, showSuccess, alwaysPrintTestName)
 			print(result)
 		end
 
+	elseif not parser.tokenStream:isDone() then
+		print("Test " .. name .. " \x1b[32;1;4mpassed\x1b[39;21;24m with \x1b[33mremaining tokens\x1b[39m")
+		local remainingTokens = 0
+		while parser.tokenStream:next() ~= nil do
+			remainingTokens = remainingTokens + 1
+		end
+
+		local debugLexer = Lexer.new(test.source)
+		local debugGen = debugLexer:createTokenGenerator()
+		local tokens = util.collect(debugGen)
+		for i,token in ipairs(tokens) do
+			token.parsed = i <= #tokens - remainingTokens
+		end
+		print((util.table(tokens, { "index", "type", "value", "parsed" }, util.tokenListFormatter)))
+		print("")
+	elseif test.autotest and test.result == nil then
+		print("Test " .. name .. " \x1b[32;1;4mpassed\x1b[39;21;24m with \x1b[33mno autotest constraint\x1b[39m")
 	elseif alwaysPrintTestName then
 		print("Test " .. name .. " \x1b[32;1;4mpassed\x1b[39;21;24m")
 	end
 
-	if showSuccess or not success then
+	if showSuccess or not success or (test.autotest and test.result == nil) or not parser.tokenStream:isDone() then
 		if uncrashed then
+			print("")
 			print("Result: " .. util.dump(result, true, true))
-			local remainingTokens = util.collect(
-				function() return parser.tokenStream:next() end,
-				15,
-				{index="...", type="...",value="..."}
-			)
-			if #remainingTokens > 0 then
-				print("Remaining tokens:")
-				util.table(remainingTokens, {"index", "type","value"}, util.tokenListFormatter)
-			else
-				print("No remaining tokens")
-			end
+			print("\n")
 		else
 			print(result)
+			print("\n")
 		end
 	end
 
-	return success
+	return success, result
 end
 
 local targetTests, showAllResults, showAllNames
@@ -516,6 +507,39 @@ elseif SHOW_TEST:match("^[0-9]+%.[0-9]+$") then
 	}
 	showAllResults = true
 	showAllNames = true
+elseif SHOW_TEST == "at:save" or SHOW_TEST == "at:append" then
+
+	if SHOW_TEST == "at:save" then autotest.reset() end
+	local any_fail = false
+
+	for i,group in ipairs(tests) do
+		for j,test in ipairs(group.members) do
+			if not test.autotest then goto continue end
+			if SHOW_TEST == "at:append" then
+				if test.result ~= nil then goto continue end
+			end
+
+			if group.index ~= nil then i = group.index end
+			if test.index ~= nil then j = test.index end
+
+			local name = i .. "." .. j .. " (" .. group.groupName .. ": " ..test.name .. ")"
+
+			local success,result = runTest(util.formatKeyword(name,true), test, true, true)
+			if success then
+				autotest.set(i .. "." .. j, result)
+			else
+				any_fail = true
+			end
+			::continue::
+		end
+	end
+
+	if not any_fail or SHOW_TEST == "at:append" then
+		autotest.save()
+	else
+		print("Autotest: errors occured, not saving")
+	end
+	return
 else
 	targetTests = tests
 	showAllResults = false
@@ -543,7 +567,6 @@ do
 		os.exit(1)
 	end
 end
-
 
 -- do
 --

@@ -57,8 +57,8 @@ function Parser:parseStatement()
 			local localKw = self.tokenStream:nextIfEq({type="keyword",value="local"})
 			if self.tokenStream:peek().type ~= "identifier" then return nil, "No identifiers to begin assignment" end
 
-			-- local variables, variablesReason = self:parseSequence(self.parseAccess, {type="symbol",value=","})
-			local variables = {self:parseAccess()}
+			local variables, variablesReason = self:parseSequence(self.parseAccess, {type="symbol",value=","})
+			-- local variables = {self:parseAccess()}
 			if not variables then return nil, "No variable sequence: " .. (variablesReason or "") end
 
 			local assign = self.tokenStream:next()
@@ -89,6 +89,7 @@ function Parser:parseStatement()
 			if not self.tokenStream:nextIfEq({type="keyword",value="do"}) then return nil, "No do kw" end
 			local body, bodyReason = self:parseBlock({type="keyword",value="end"})
 			if body == nil then return nil, "Do block parsing failed: " .. (bodyReason or "") end
+			self.tokenStream:next() -- end
 			return {
 				type = "do",
 				body = body,
@@ -159,7 +160,7 @@ function Parser:parseStatement()
 				step = self:parseExpression()
 			end
 
-			if not self.tokenStream:nextIfEq({type="keyword",value="do"}) then return nil, "Missing do in for" end
+			if not self.tokenStream:nextIfEq({type="keyword",value="do"}) then return nil, "No do kw" end
 			local body, bodyReason = self:parseBlock({type="keyword",value="end"})
 			if body == nil then return nil, "Failed to parse for body: " .. (bodyReason or "") end
 			self.tokenStream:next()
@@ -171,6 +172,66 @@ function Parser:parseStatement()
 				max = max,
 				step = step,
 				body = body,
+			}
+		end,
+
+		"Iterator for loop statement", function()
+			if not self.tokenStream:nextIfEq({type="keyword",value="for"}) then return nil, "No for kw" end
+			local variables, variablesReason = self:parseSequence(function()
+				local name = self.tokenStream:next()
+				if name == nil then return nil, "Missing variable name" end
+				if name.type ~= "identifier" then return nil, "Variable name is not an identifier" end
+				return name.value
+			end, {type="symbol",value=","})
+
+			if not self.tokenStream:nextIfEq({type="keyword",value="in"}) then return nil, "No in kw" end
+
+			local iterator, iteratorReason = self:parseExpression()
+			if not iterator then return nil, "Faield to parse iterator: " .. (iteratorReason or "") end
+
+
+			if not self.tokenStream:nextIfEq({type="keyword",value="do"}) then return nil, "No do kw" end
+			local body, bodyReason = self:parseBlock({type="keyword",value="end"})
+			if body == nil then return nil, "Failed to parse for body: " .. (bodyReason or "") end
+			self.tokenStream:next()
+
+			return {
+				type = "forIn",
+				variables = variables,
+				expressions = {iterator},
+				body = body,
+			}
+		end,
+
+		"While loop statement", function()
+			if not self.tokenStream:nextIfEq({type="keyword",value="while"}) then return nil, "No while kw" end
+			local condition = self:parseExpression()
+
+			if not self.tokenStream:nextIfEq({type="keyword",value="do"}) then return nil, "No do kw" end
+			local body, bodyReason = self:parseBlock({type="keyword",value="end"})
+			if body == nil then return nil, "Failed to parse while body: " .. (bodyReason or "") end
+			self.tokenStream:next()
+
+			return {
+				type = "while",
+				condition = condition,
+				body = body,
+			}
+		end,
+
+		"Repeat until statement", function()
+			if not self.tokenStream:nextIfEq({type="keyword",value="repeat"}) then return nil, "No while kw" end
+			local body, bodyReason = self:parseBlock({type="keyword",value="until"})
+			if body == nil then return nil, "Failed to parse repeat-until body: " .. (bodyReason or "") end
+			self.tokenStream:next()
+
+			local condition, conditionReason = self:parseExpression()
+			if not condition then return nil, "Failed to parse repeat-until condition: " .. (conditionReason or "") end
+
+			return {
+				type = "repeatUntil",
+				body = body,
+				condition = condition,
 			}
 		end,
 
@@ -218,6 +279,30 @@ function Parser:parseStatement()
 			return {
 				type = "return",
 				values = {returnValues},
+			}
+		end,
+		"Label definition statement", function()
+			if not self.tokenStream:nextIfEq({type="symbol",value="::"}) then return nil, "No start double colon" end
+			local name = self.tokenStream:next()
+			if name == nil then return nil, "No label name" end
+			if name.type ~= "identifier" then return nil, "Label name is not an identifier" end
+			if not self.tokenStream:nextIfEq({type="symbol",value="::"}) then return nil, "No end double colon" end
+
+			return {
+				type = "label",
+				name = name.value,
+			}
+		end,
+		"Goto statement", function()
+			if not self.tokenStream:nextIfEq({type="keyword",value="goto"}) then return nil, "No goto kw" end
+
+			local name = self.tokenStream:next()
+			if name == nil then return nil, "No label name" end
+			if name.type ~= "identifier" then return nil, "Label name is not an identifier" end
+
+			return {
+				type = "goto",
+				destination = name.value,
 			}
 		end
 	)

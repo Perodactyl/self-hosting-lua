@@ -92,6 +92,7 @@ end
 ---@param pretty? boolean
 function util.dump(tbl, color, pretty)
 	if color == nil then color = true end
+	local uglySp = pretty and "" or " "
 	local prettyLn = pretty and "\n" or ""
 	local prettyLnT = pretty and "\n\t" or ""
 	local prettySp = pretty and " " or ""
@@ -133,7 +134,7 @@ function util.dump(tbl, color, pretty)
 			end
 
 			out = out .. prettyLnT .. keyStr .. valStr
-			if i < #keys then out = out .. ", " end
+			if i < #keys then out = out .. "," .. uglySp end
 		end
 		out = out .. (#keys > 0 and prettyLn or "") .. "}"
 
@@ -348,12 +349,21 @@ function util.tokenListFormatter(key, row, color)
 		if row.type == "assign" then return tostring(row.value) end
 		if row.type == "nilLiteral" then return util.formatLiteral("nil", color) end
 	end
+
+	if key == "parsed" then
+		if row.parsed then
+			if color then return "\x1b[32mParsed\x1b[39m" else return "Parsed" end
+		else
+			if color then return "\x1b[31mUnparsed\x1b[39m" else return "Unparsed" end
+		end
+	end
 end
 
 ---@generic K,V
 ---@param values table<K,V>[]
 ---@param columnTitles? K[]
 ---@param formatter? fun(key:K, row:table<K,V>|nil, color:boolean): string|nil Return nil to use default formatter. If row is nil, key is the title of a column. Color must be respected for length calculation.
+---@return string, number width, number height
 function util.table(values, columnTitles, formatter)
 	local standardFormatter
 	if formatter == nil then
@@ -415,6 +425,8 @@ function util.table(values, columnTitles, formatter)
 		end
 	end
 
+	local outputLines = {}
+
 	local topFrameLine    = "┏━"
 	local titleLine       = "┃ "
 	local frameLine       = "┣━"
@@ -438,9 +450,9 @@ function util.table(values, columnTitles, formatter)
 		end
 	end
 
-	print(topFrameLine)
-	print(titleLine)
-	print(frameLine)
+	table.insert(outputLines, topFrameLine)
+	table.insert(outputLines, titleLine)
+	table.insert(outputLines, frameLine)
 
 	for row = 1, #values do
 		local line = "┃ "
@@ -454,13 +466,14 @@ function util.table(values, columnTitles, formatter)
 			end
 		end
 
-		print(line)
+		table.insert(outputLines, line)
 
 		if row ~= #values then
 			-- print(frameLine)
 		end
 	end
-	print(bottomFrameLine)
+	table.insert(outputLines, bottomFrameLine)
+	return table.concat(outputLines, "\n"), #bottomFrameLine, #outputLines
 end
 
 ---@param input string
