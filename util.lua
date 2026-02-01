@@ -43,15 +43,26 @@ function util.formatString(input, color, allowTruncation, escapeFormat)
 				substitute = string.format("\\u%04x", char:byte())
 			end
 
-			if char == "\a" then substitute = "\\a" end
-			if char == "\b" then substitute = "\\b" end
-			if char == "\f" then substitute = "\\f" end
-			if char == "\n" then substitute = "\\n" end
-			if char == "\r" then substitute = "\\r" end
-			if char == "\t" then substitute = "\\t" end
-			if char == "\v" then substitute = "\\v" end
-			if char == "\\" then substitute = "\\\\" end
-			if char == "\"" then substitute = "\\\"" end
+			if escapeFormat == "json" then
+				if char == "\"" then substitute = "\\\"" end
+				if char == "\\" then substitute = "\\\\" end
+				if char == "/"  then substitute = "\\/" end
+				if char == "\b" then substitute = "\\b" end
+				if char == "\f" then substitute = "\\f" end
+				if char == "\n" then substitute = "\\n" end
+				if char == "\r" then substitute = "\\r" end
+				if char == "\t" then substitute = "\\t" end
+			else
+				if char == "\a" then substitute = "\\a" end
+				if char == "\b" then substitute = "\\b" end
+				if char == "\f" then substitute = "\\f" end
+				if char == "\n" then substitute = "\\n" end
+				if char == "\r" then substitute = "\\r" end
+				if char == "\t" then substitute = "\\t" end
+				if char == "\v" then substitute = "\\v" end
+				if char == "\\" then substitute = "\\\\" end
+				if char == "\"" then substitute = "\\\"" end
+			end
 
 			table.insert(outputParts, substitute)
 		end
