@@ -1,5 +1,6 @@
 {
 	"$schema": "https://raw.githubusercontent.com/sumneko/vscode-lua/master/setting/schema.json",
 	"runtime.version": "5.4",
-	"runtime.path": ["./?.lua","./?/init.lua"]
+	"runtime.path": ["./?.lua","./?/init.lua"],
+	"workspace.library": ["lua54-syntax.lua"]
 }

@@ -1,146 +1,69 @@
+local Visitor = require("ASTVisitor")
 local util = require("util")
 local codegen = {}
 
----@param block Block
----@param indent boolean
----@return string
-function codegen.block(block, indent)
-	local outputLines = {}
-	for _,statement in ipairs(block.statements) do
-		local output = codegen.statement(statement)
-		for line in output:gmatch("[^\n]+") do
-			table.insert(outputLines, line)
-		end
-	end
-	if block.returnStatement then
-		local returns = {}
-		for _,v in ipairs(block.returnStatement) do
-			table.insert(returns, codegen.expression(v))
-		end
-		table.insert(outputLines, "return " .. table.concat(returns, ","))
-	end
-	return (indent and "\t" or "") .. table.concat(outputLines, indent and "\n\t" or "\n")
-end
+---@param chunk Chunk
+---@param color boolean
+function codegen.generate(chunk, color)
+	---@type Token[]
+	local outputTokens = {}
+	---@type Visitor
+	local visitorPrototype = {}
 
----@param statement Statement
----@return string
-function codegen.statement(statement)
-	if statement.type == "assignment" or statement.type == "localAssignment" then
-		local kw = statement.type == "localAssignment" and "local " or ""
-		local variables = {}
-		for _,access in ipairs(statement.variables) do
-			table.insert(variables, codegen.prefix(access))
-		end
-		local values = {}
-		for _,expr in ipairs(statement.values) do
-			table.insert(values, codegen.expression(expr))
-		end
-		return kw .. table.concat(variables,",") .. " = " .. table.concat(values,",")
+	function visitorPrototype:visitKeyword(kw)
+		table.insert(outputTokens, {type="keyword",value=kw})
 	end
-	if statement.type == "call" then return codegen.call(statement) end
-	if statement.type == "funcDef" or statement.type == "localFuncDef" then
-		local output = statement.type == "localFuncDef" and "local function " or "function "
-		output = output .. statement.name.base
-		for _,part in statement.name.accesses do
-			output = output .. "." .. part
-		end
-		if statement.name.method then
-			output = output .. ":" .. statement.name.method
-		end
-
-		output = output .. codegen.funcImpl(statement.impl)
-		return output
+	function visitorPrototype:visitIdentifier(ident)
+		table.insert(outputTokens, {type="identifier",value=ident})
 	end
-	if statement.type == "forRange" then
-		local output = "for " .. statement.iterVar .. " = "
-		output = output .. codegen.expression(statement.min) .. "," .. codegen.expression(statement.max)
-		if statement.step then output = output .. "," .. codegen.expression(statement.step) end
-		output = output .. " do\n"
-		output = output .. codegen.block(statement.body, true)
-		output = output .. "\nend"
-		return output
+	function visitorPrototype:visitAssign(assign)
+		table.insert(outputTokens, {type="assign",value=assign})
 	end
-	if statement.type == "if" then
-		local output = "if " .. codegen.expression(statement.condition) .. " then\n"
-		output = output .. codegen.block(statement.body, true)
-		for _,part in ipairs(statement.elseifs) do
-			output = output .. "\nelseif " .. codegen.expression(part.condition) .. " then\n"
-			output = output .. codegen.block(part.body, true)
-		end
-		if statement.elseBody then
-			output = output .. "\nelse\n"
-			output = output .. codegen.block(statement.elseBody, true)
-		end
-		output = output .. "\nend"
-		return output
+	function visitorPrototype:visitSymbol(symbol)
+		table.insert(outputTokens, {type="symbol",value=symbol})
 	end
-	error("TODO " .. statement.type)
-end
-
----@param prefix PrefixExpression
----@return string
-function codegen.prefix(prefix)
-	if prefix.type ~= "prefix" then error("codegen.prefix called on " .. util.dump(prefix), 2) end
-	if prefix.subtype == "identifier" then
-		return prefix.inner
-	elseif prefix.subtype == "dot" then
-		return codegen.prefix(prefix.left) .. "." .. prefix.sub
-	elseif prefix.subtype == "index" then
-		return codegen.prefix(prefix.left) .. "[" .. codegen.expression(prefix.sub) .. "]"
-	elseif prefix.subtype == "call" then
-		return (codegen.call(prefix.call))
-	elseif prefix.subtype == "group" then
-		return (codegen.expression(prefix.inner))
+	function visitorPrototype:visitNilLiteral(_)
+		table.insert(outputTokens, {type="nil"})
 	end
-	error("Called codegen.prefix on " .. util.dump(prefix, true, true))
-end
-
----@param call FunctionCall
----@return string
-function codegen.call(call)
-	local name = codegen.prefix(call.callee)
-	if call.method ~= nil then
-		name = name .. ":" .. call.method
+	function visitorPrototype:visitBoolLiteral(literal)
+		table.insert(outputTokens, {type="bool",value=literal.value})
+	end
+	function visitorPrototype:visitNumLiteral(literal)
+		table.insert(outputTokens, {type="number",value=literal.value})
 	end
 
-	local params = {}
-	if call.args.type == "parenthesis" then
-		for _,arg in ipairs(call.args.arguments) do
-			table.insert(params, codegen.expression(arg))
-		end
-	else -- table or string
-		table.insert(params, codegen.expression(call.args --[[@as Expression]]))
-	end
+	local visitor = Visitor.create(visitorPrototype)
+	visitor:visitChunk(chunk)
 
-	return name .. "(" .. table.concat(params, ",") .. ")"
-end
-
----@param expr Expression
----@return string
-function codegen.expression(expr)
-	if expr.type == "prefix" then return codegen.prefix(expr --[[@as PrefixExpression]]) end
-	if expr.type == "binary" then
-		return codegen.expression(expr.left)
-			.. " " .. expr.operator .. " "
-			.. codegen.expression(expr.right)
-	end
-	if expr.type == "number" then return tostring(expr.value) end
-	if expr.type == "nil" then return "nil" end
-	if expr.type == "bool" then return tostring(expr.value) end
-	if expr.type == "string" then return '"' .. tostring(expr.value) .. '"' end
-	return expr.type
-end
-
----@param impl FuncImpl
----@return string
-function codegen.funcImpl(impl)
 	local output = ""
-	output = output .. "(" .. table.concat(impl.parameters, ", ")
-	if impl.rest then output = output .. ", ..." end
-	output = output .. ")\n"
+	for _,token in ipairs(outputTokens) do
+		local str, needsSpace = "", false
+		if token.type == "keyword" then
+			str = util.formatKeyword(token.value, color)
+			needsSpace = true
+		elseif token.type == "identifier" then
+			str = util.formatIdentifier(token.value, color)
+			needsSpace = true
+		elseif token.type == "assign" then
+			str = token.value
+		elseif token.type == "symbol" then
+			str = token.value
+		elseif token.type == "nil" then
+			str = util.formatLiteral("nil", color)
+			needsSpace = true
+		elseif token.type == "bool" then
+			str = util.formatLiteral(token.value, color)
+			needsSpace = true
+		elseif token.type == "number" then
+			str = util.formatLiteral(token.value, color)
+			needsSpace = true
+		end
 
-	output = output .. codegen.block(impl.body,true)
-	output = output .. "\nend"
+		if needsSpace and output:sub(-1,-1):match("[a-zA-Z0-9]") and #output > 0 then
+			output = output .. " "
+		end
+		output = output .. str
+	end
 
 	return output
 end

@@ -38,7 +38,7 @@ end
 
 do
 	--- stat
-	---@alias Statement Delimiter | Assignment | FunctionCall | Label | Break | Goto | Do | While | RepeatUntil | If | ForRange | ForIn | FuncDef | LocalFuncDef | LocalAssignment
+	---@alias Statement Delimiter | Assignment | FunctionCall | Label | Break | Goto | Do | While | RepeatUntil | If | ForRange | ForIn | FuncDef
 
 	--- ';' terminal of stat
 	---@class Delimiter
@@ -48,11 +48,8 @@ do
 		--- varlist '=' explist
 		---@class Assignment
 		---@field type "assignment"
-		---@field variables Access[] varlist
-		---@field values Expression[] explist
-
-		---@class LocalAssignment
-		---@field type "localAssignment"
+		---@field isLocal boolean
+		---@field assign "="
 		---@field variables Access[] varlist
 		---@field values Expression[] explist
 
@@ -61,19 +58,13 @@ do
 	end
 
 	do
-		---@alias FunctionCall FunctionExpressionCall | FunctionMethodCall
+		---@alias FunctionCall FunctionExpressionCall
 
 		--- prefixexp args branch of functioncall
 		---@class FunctionExpressionCall
 		---@field type "call"
 		---@field callee PrefixExpression
-		---@field args Arguments
-
-		--- prefixexp ':' Name args branch of functioncall
-		---@class FunctionMethodCall
-		---@field type "callMethod"
-		---@field class PrefixExpression
-		---@field method Identifier
+		---@field method? Identifier
 		---@field args Arguments
 
 		--- args
@@ -143,12 +134,8 @@ do
 
 		---@class FuncDef
 		---@field type "funcDef"
+		---@field isLocal boolean
 		---@field name FuncName
-		---@field impl FuncImpl
-
-		---@class LocalFuncDef
-		---@field type "localFuncDef"
-		---@field name Identifier
 		---@field impl FuncImpl
 
 		--- funcname ::= Name {'.' Name} [':' Name], so a.b:c populates all 3 fields

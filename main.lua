@@ -1,9 +1,8 @@
-package.path = "./?.lua;./?/init.lua;" .. package.path
 -- local STP = require("stacktraceplus")
 
 local Lexer = require("lexer")
 local Parser = require("parser")
--- local codegen = require("codegen")
+local codegen = require("codegen")
 local autotest = require("autotest")
 local util = require("util")
 
@@ -54,7 +53,72 @@ local tests = {
 		},
 	},
 	{
-		groupName = "Literals",
+		groupName = "String Literals",
+		members = {
+			{
+				name = "Base",
+				source = [["Hello, World!"]],
+				parser = "parseExpression",
+				result = {type="string",value="Hello, World!"}
+			},
+			{
+				name = "Long Literal",
+				source = [[ [=[Hello, "World!"]=] ]],
+				parser = "parseExpression",
+				result = {type="string",value=[=[Hello, "World!"]=]}
+			},
+			{
+				name = "Escapes",
+				source = [["\a\b\f\n\r\t\v\\\"\'"]],
+				parser = "parseExpression",
+				result = {type="string",value="\a\b\f\n\r\t\v\\\"\'"},
+			},
+			{
+				name = "Whitespace-skipping Escape",
+				source = "\"ab\\z\r\n\t\tc\"",
+				parser = "parseExpression",
+				result = {type="string",value="abc"},
+			},
+			{
+				name = "Decimal Escape",
+				source = [["\27[31m"]],
+				parser = "parseExpression",
+				result = {type="string",value="\x1b[31m"},
+			},
+			{
+				name = "Hexadecimal Escape",
+				source = [["\x1b[31m"]],
+				parser = "parseExpression",
+				result = {type="string",value="\x1b[31m"},
+			},
+			{
+				name = "Unicode Escape",
+				source = [["\u{1F600}"]],
+				parser = "parseExpression",
+				result = {type="string",value="\u{1F600}"},
+			},
+			{
+				name = "No Escapes in Long Literal",
+				source = [=[ [[\"]] ]=],
+				parser = "parseExpression",
+				result = {type="string",value="\\\""},
+			},
+			{
+				name = "Long Literals Skip First Newline",
+				source = "[[\nabc]]",
+				parser = "parseExpression",
+				result = {type="string",value="abc"},
+			},
+			{
+				name = "Long Literals Assimilate Newlines",
+				source = "[[abc\r\n]]",
+				parser = "parseExpression",
+				result = {type="string",value="abc\n"},
+			},
+		},
+	},
+	{
+		groupName = "Other Literals",
 		members = {
 			{
 				name = "Nil Literal",
@@ -105,19 +169,6 @@ local tests = {
 				result = {type="number",value=512}
 			},
 			{
-				name = "String Literal",
-				source = [["Hello, World!"]],
-				parser = "parseExpression",
-				result = {type="string",value="Hello, World!"}
-			},
-			{
-				name = "Long String Literal",
-				source = [[ [=[Hello, "World!"]=] ]],
-				parser = "parseExpression",
-				result = {type="string",value=[=[Hello, "World!"]=]}
-			},
-			-- TODO add tests for escape sequences and nested long strings
-			{
 				name = "Vararg",
 				source = [[...]],
 				parser = "parseExpression",
@@ -126,12 +177,6 @@ local tests = {
 				name = "Function expression",
 				source = [[function() end]],
 				parser = "parseExpression",
-			},
-			{
-				name = "Table Literal",
-				source = [[{key=value}]],
-				parser = "parseExpression",
-				autotest = true,
 			},
 		},
 	},
@@ -215,8 +260,32 @@ local tests = {
 				autotest = true,
 			},
 			{
-				name = "Comparison",
+				name = "Inquality",
+				source = "input ~= 'test'",
+				parser = "parseExpression",
+				autotest = true,
+			},
+			{
+				name = "Less",
+				source = "#tbl < 3",
+				parser = "parseExpression",
+				autotest = true,
+			},
+			{
+				name = "Less-Equal",
 				source = "#tbl <= 3",
+				parser = "parseExpression",
+				autotest = true,
+			},
+			{
+				name = "Greater",
+				source = "#tbl > 3",
+				parser = "parseExpression",
+				autotest = true,
+			},
+			{
+				name = "Greater-Equal",
+				source = "#tbl >= 3",
 				parser = "parseExpression",
 				autotest = true,
 			},
@@ -346,6 +415,12 @@ local tests = {
 				autotest = true,
 			},
 			{
+				name = "Local Declaration",
+				source = [[local a,b,c]],
+				parser = "parseStatement",
+				autotest = true,
+			},
+			{
 				name = "Function definition",
 				source = [[function test() print("hi") end]],
 				parser = "parseStatement",
@@ -369,26 +444,14 @@ local tests = {
 				parser = "parseStatement",
 				autotest = true,
 			},
+			{
+				name = "Return",
+				source = [[return "test", false]],
+				parser = "parseStatement",
+				autotest = true,
+			},
 		},
 	},
-	-- {
-	-- 	groupName = "The Ultimate Test",
-	-- 	members = {
-	-- 		{
-	-- 			name = "main.lua",
-	-- 			source = (function()
-	-- 				local file = io.open("main.lua", "r")
-	-- 				if file then
-	-- 					local content = file:read("a")
-	-- 					file:close()
-	-- 					return content
-	-- 				end
-	-- 				return "poop"
-	-- 			end)(),
-	-- 			parser = "parseChunk"
-	-- 		},
-	-- 	},
-	-- },
 }
 
 autotest.load()
@@ -396,7 +459,7 @@ autotest.load()
 for i,group in ipairs(tests) do
 	for j,test in ipairs(group.members) do
 		if test.autotest then
-			test.result = autotest.get(i .. "." .. j)
+			test.result = autotest.get(i .. "." .. j .. "-" .. group.groupName .. "-" .. test.name)
 			if test.result == nil then
 				print("\x1b[31mAutotest: Missing " .. i .. "." .. j .. "\x1b[39m")
 			end
@@ -418,7 +481,6 @@ local function runTest(name, test, showSuccess, alwaysPrintTestName)
 
 		print("Test " .. name .. " \x1b[31;1;4mfailed\x1b[39;21;24m")
 
-
 		local remainingTokens = 0
 		while parser.tokenStream:next() ~= nil do
 			remainingTokens = remainingTokens + 1
@@ -430,6 +492,7 @@ local function runTest(name, test, showSuccess, alwaysPrintTestName)
 		for i,token in ipairs(tokens) do
 			token.parsed = i <= #tokens - remainingTokens
 		end
+
 		print((util.table(tokens, { "index", "type", "value", "parsed" }, util.tokenListFormatter)))
 		print("")
 
@@ -458,13 +521,13 @@ local function runTest(name, test, showSuccess, alwaysPrintTestName)
 		end
 		print((util.table(tokens, { "index", "type", "value", "parsed" }, util.tokenListFormatter)))
 		print("")
-	elseif test.autotest and test.result == nil then
+	elseif test.autotest and test.result == nil and os.getenv("SHOW_MISSING_AUTOTEST") ~= "0" then
 		print("Test " .. name .. " \x1b[32;1;4mpassed\x1b[39;21;24m with \x1b[33mno autotest constraint\x1b[39m")
 	elseif alwaysPrintTestName then
 		print("Test " .. name .. " \x1b[32;1;4mpassed\x1b[39;21;24m")
 	end
 
-	if showSuccess or not success or (test.autotest and test.result == nil) or not parser.tokenStream:isDone() then
+	if showSuccess or not success or (test.autotest and test.result == nil and os.getenv("SHOW_MISSING_AUTOTEST") ~= "0") or not parser.tokenStream:isDone() then
 		if uncrashed then
 			print("")
 			print("Result: " .. util.dump(result, true, true))
@@ -478,7 +541,7 @@ local function runTest(name, test, showSuccess, alwaysPrintTestName)
 	return success, result
 end
 
-local targetTests, showAllResults, showAllNames
+local targetTests, showAllResults, showAllNames, saveTree
 
 local SHOW_TEST = arg[1]
 
@@ -517,6 +580,8 @@ elseif SHOW_TEST == "at:save" or SHOW_TEST == "at:append" then
 			if not test.autotest then goto continue end
 			if SHOW_TEST == "at:append" then
 				if test.result ~= nil then goto continue end
+			else
+				test.result = nil
 			end
 
 			if group.index ~= nil then i = group.index end
@@ -526,7 +591,7 @@ elseif SHOW_TEST == "at:save" or SHOW_TEST == "at:append" then
 
 			local success,result = runTest(util.formatKeyword(name,true), test, true, true)
 			if success then
-				autotest.set(i .. "." .. j, result)
+				autotest.set(i .. "." .. j .. "-" .. group.groupName .. "-" .. test.name, result)
 			else
 				any_fail = true
 			end
@@ -540,6 +605,36 @@ elseif SHOW_TEST == "at:save" or SHOW_TEST == "at:append" then
 		print("Autotest: errors occured, not saving")
 	end
 	return
+elseif SHOW_TEST == "at:evict" and #arg == 2 then
+	local i,j = arg[2]:match("([0-9]+)%.([0-9]+)")
+	local group = tests[tonumber(i)]
+	local test = group.members[tonumber(j)]
+
+	autotest.set(i .. "." .. j .. "-" .. group.groupName .. "-" .. test.name, nil)
+
+	autotest.save()
+	return
+elseif SHOW_TEST == "custom" and #arg == 2 then
+	local path = arg[2]
+	local file, errmsg = io.open(path, "r")
+	if file == nil then error("Failed to open file: " .. errmsg, 0) end
+	local content = file:read("a")
+	file:close()
+	targetTests = {
+		{
+			groupName = "Specified File",
+			members = {
+				{
+					name = path,
+					source = content,
+					parser = "parseChunk",
+				},
+			},
+		},
+	}
+	showAllResults = true
+	showAllNames = true
+	saveTree = os.getenv("SAVE_TREE")
 else
 	targetTests = tests
 	showAllResults = false
@@ -555,8 +650,17 @@ do
 			if test.index ~= nil then j = test.index end
 			local name = i .. "." .. j .. " (" .. group.groupName .. ": " ..test.name .. ")"
 
-			local result = runTest(util.formatKeyword(name,true), test, showAllResults, showAllNames)
-			if result then testsPassed = testsPassed + 1 end
+			local success, result = runTest(util.formatKeyword(name,true), test, showAllResults, showAllNames)
+			if success then testsPassed = testsPassed + 1 end
+			if success and saveTree then
+				local file, errmsg = io.open(saveTree, "w")
+				if file then
+					file:write(util.dumpJSON(result, false))
+					file:close()
+				else
+					print("Failed to save tree: " .. errmsg)
+				end
+			end
 			testsRun = testsRun + 1
 		end
 	end
@@ -569,12 +673,14 @@ do
 end
 
 -- do
---
--- 	local lexer = Lexer.new(source)
+-- 	local lexer = Lexer.new([[
+-- 		for i = 1,10 do
+-- 			print(i)
+-- 		end]])
 -- 	local gen = lexer:createTokenGenerator()
 --
 -- 	local parser = Parser.new(gen)
--- 	local success, result, resultReason = xpcall(parser.parseExpression, debug.traceback, parser)
+-- 	local success, result, resultReason = xpcall(parser.parseChunk, debug.traceback, parser)
 --
 -- 	if success then
 -- 		if result == nil then
@@ -588,21 +694,10 @@ end
 -- 		end
 -- 		print(util.dump(result, true, true))
 --
--- 		local treeFile = io.open("tree.json", "w")
--- 		if treeFile then
--- 			treeFile:write(util.dumpJSON(result, false) .. "\n")
--- 			treeFile:close()
--- 		end
---
 -- 		print("")
 --
--- 		local code = codegen.block(result, false)
+-- 		local code = codegen.generate(result)
 -- 		print(code)
--- 		local outFile = io.open("output.lua", "w")
--- 		if outFile then
--- 			outFile:write(code)
--- 			outFile:close()
--- 		end
 -- 	else
 -- 		print(resultReason)
 -- 	end

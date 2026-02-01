@@ -5,7 +5,8 @@ local defaultTruncationIndicator = "\x1b[40m...\x1b[49m"
 ---@param input string
 ---@param color boolean
 ---@param allowTruncation boolean
-function util.formatString(input, color, allowTruncation)
+---@param escapeFormat? "lua5.1" | "lua5.2" | "json"
+function util.formatString(input, color, allowTruncation, escapeFormat)
 	local fullLength = #input
 	local wasTruncated = false
 	if allowTruncation then
@@ -16,7 +17,7 @@ function util.formatString(input, color, allowTruncation)
 	local outputParts = {'\x1b[32m', '"'}
 	local lastPrintableSection = 0
 	while lastPrintableSection < #input do
-		local printableStart,printableEnd = input:find("[! #-~]+", lastPrintableSection+1)
+		local printableStart,printableEnd = input:find("[]-~#-[ !]+", lastPrintableSection+1)
 
 		local printable, nonprintable
 		if printableStart == nil or printableEnd == nil then
@@ -33,7 +34,14 @@ function util.formatString(input, color, allowTruncation)
 
 		for i = 1,#nonprintable do
 			local char = nonprintable:sub(i,i)
-			local substitute = string.format("\\%03o", char:byte())
+			local substitute
+			if escapeFormat == "lua5.1" then
+				substitute = string.format("\\%03u", char:byte())
+			elseif escapeFormat == nil or escapeFormat == "lua5.2" then
+				substitute = string.format("\\x%02x", char:byte())
+			elseif escapeFormat == "json" then
+				substitute = string.format("\\u%04x", char:byte())
+			end
 
 			if char == "\a" then substitute = "\\a" end
 			if char == "\b" then substitute = "\\b" end
@@ -166,6 +174,7 @@ function util.isArray(tbl)
 	for k in pairs(tbl) do
 		table.insert(keys, k)
 	end
+
 	for i,k in ipairs(keys) do
 		if i ~= k then return false end
 	end
@@ -187,7 +196,7 @@ function util.dumpJSON(tbl, color)
 			local output = "{"
 			for k,v in pairs(tbl) do
 				output = output
-					.. util.formatIdentifier('"' .. k .. '"', color)
+					.. util.formatString(k, color, false, "json")
 					.. ':'
 					.. util.dumpJSON(v, color)
 
@@ -197,7 +206,7 @@ function util.dumpJSON(tbl, color)
 			return output
 		end
 	elseif type(tbl) == "string" then
-		return util.formatString(tbl, color, false)
+		return util.formatString(tbl, color, false, "json")
 	elseif type(tbl) == "number" or type(tbl) == "boolean" then
 		return util.formatLiteral(tbl, color)
 	elseif type(tbl) == "nil" then

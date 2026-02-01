@@ -4,7 +4,7 @@ local LazyStream = require("lazyStream")
 ---@alias Token { type: "string", value: string, [any]:any } | { type: "number", value: number, [any]:any } | { type: "keyword", value: Keyword, [any]:any } | { type: "operator", value: Operator, [any]:any } | { type: "symbol", value: Symbol, [any]:any } | { type: "assign", value: Assign, [any]:any } | { type: "identifier", value: string, [any]:any }
 ---@alias Operator UnaryOperator | BinaryOperator
 ---@alias Keyword "break" | "do" | "else" | "elseif" | "end" | "for" | "function" | "goto" | "if" | "in" | "local" | "repeat" | "return" | "then" | "until" | "while" | "local"
----@alias Symbol "{" | "}" | "(" | ")" | "[" | "]" | "," | "." | ":" | "::" | ";"
+---@alias Symbol "{" | "}" | "(" | ")" | "[" | "]" | "," | "." | ":" | "::" | ";" | "..."
 ---@alias Assign "="
 
 ---@class Lexer
@@ -175,6 +175,8 @@ function Lexer:parseNextToken()
 				end
 				self.charStream:continue()
 
+				self.charStream:nextIfEq("\n")
+
 				while not self.charStream:isDone() do
 					if self.charStream:nextIfEq("]") then
 						self.charStream:save()
@@ -185,6 +187,12 @@ function Lexer:parseNextToken()
 							self.charStream:recall()
 							stringContents = stringContents .. "]"
 						end
+					elseif self.charStream:nextIfEq("\n") then
+						self.charStream:nextIfEq("\r")
+						stringContents = stringContents .. "\n"
+					elseif self.charStream:nextIfEq("\r") then
+						self.charStream:nextIfEq("\n")
+						stringContents = stringContents .. "\n"
 					else
 						stringContents = stringContents .. self.charStream:next()
 					end
@@ -194,6 +202,50 @@ function Lexer:parseNextToken()
 				while not self.charStream:isDone() do
 					if self.charStream:nextIfEq(delim) then
 						break
+					elseif self.charStream:nextIfEq("\\") then
+						local escapeChar = self.charStream:next()
+
+						if     escapeChar == "a"  then stringContents = stringContents .. "\a"
+						elseif escapeChar == "b"  then stringContents = stringContents .. "\b"
+						elseif escapeChar == "f"  then stringContents = stringContents .. "\f"
+						elseif escapeChar == "n"  then stringContents = stringContents .. "\n"
+						elseif escapeChar == "r"  then stringContents = stringContents .. "\r"
+						elseif escapeChar == "t"  then stringContents = stringContents .. "\t"
+						elseif escapeChar == "v"  then stringContents = stringContents .. "\v"
+						elseif escapeChar == "\\" then stringContents = stringContents .. "\\"
+						elseif escapeChar == "\"" then stringContents = stringContents .. "\""
+						elseif escapeChar == "'"  then stringContents = stringContents .. "'"
+						elseif escapeChar:match("[0-9]") then
+							local parts = escapeChar
+							for _ = 1,2 do
+								local next = self.charStream:peek()
+								if next ~= nil and next:match("[0-9]") then
+									parts = parts .. next
+									self.charStream:next()
+								else
+									break
+								end
+							end
+							stringContents = stringContents .. string.char(tonumber(parts,10))
+						elseif escapeChar == "x" then
+							local hex = readN(self.charStream, 2)
+							stringContents = stringContents .. string.char(tonumber(hex,16))
+						elseif escapeChar == "u" then
+							if not self.charStream:nextIfEq("{") then error("Escape missing {") end
+							local numParts = ""
+							while not self.charStream:nextIfEq("}") do
+								local digit = self.charStream:next()
+								if not digit or not digit:match("[0-9a-fA-F]") then
+									error("Unclosed unicode escape")
+								end
+								numParts = numParts .. digit
+							end
+							stringContents = stringContents .. utf8.char(tonumber(numParts, 16))
+						elseif escapeChar == "z" then
+							whiteSpace(self.charStream)
+						else
+							error("Invalid escape: \\" .. escapeChar)
+						end
 					else
 						stringContents = stringContents .. self.charStream:next()
 					end
@@ -236,7 +288,7 @@ function Lexer:parseNextToken()
 			{ match = "<",  result = { type = "operator" }, autoSet = "value" },
 			{ match = "<=", result = { type = "operator" }, autoSet = "value" },
 			{ match = "==", result = { type = "operator" }, autoSet = "value" },
-			{ match = "!=", result = { type = "operator" }, autoSet = "value" },
+			{ match = "~=", result = { type = "operator" }, autoSet = "value" },
 			{ match = ">",  result = { type = "operator" }, autoSet = "value" },
 			{ match = ">=", result = { type = "operator" }, autoSet = "value" },
 

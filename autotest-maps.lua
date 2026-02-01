@@ -1,27 +1,11 @@
---[[ File is auto generated 01/31/26 12:40:12 EST UTC-0500 ]]
+--[[ File is auto generated 01/31/26 20:02:24 EST UTC-0500 ]]
 return {
-	["2.13"] = {
-		type = "table",
-		value = {
-			{
-				key = {
-					type = "string",
-					value = "key"
-				},
-				value = {
-					inner = "value",
-					subtype = "identifier",
-					type = "prefix"
-				}
-			}
-		}
-	},
-	["3.1"] = {
+	["4.1-Prefix Expressions-Identifier Access"] = {
 		inner = "testIdentifier",
 		subtype = "identifier",
 		type = "prefix"
 	},
-	["3.2"] = {
+	["4.2-Prefix Expressions-Dot Access"] = {
 		left = {
 			inner = "table",
 			subtype = "identifier",
@@ -31,7 +15,7 @@ return {
 		subtype = "dot",
 		type = "prefix"
 	},
-	["3.3"] = {
+	["4.3-Prefix Expressions-Index Access"] = {
 		left = {
 			inner = "elements",
 			subtype = "identifier",
@@ -45,7 +29,7 @@ return {
 		subtype = "index",
 		type = "prefix"
 	},
-	["3.4"] = {
+	["4.4-Prefix Expressions-Call"] = {
 		call = {
 			args = {
 				{
@@ -68,7 +52,7 @@ return {
 		subtype = "call",
 		type = "prefix"
 	},
-	["3.5"] = {
+	["4.5-Prefix Expressions-Group"] = {
 		inner = {
 			left = {
 				type = "number",
@@ -84,7 +68,7 @@ return {
 		subtype = "group",
 		type = "prefix"
 	},
-	["3.6"] = {
+	["4.6-Prefix Expressions-IIFE"] = {
 		call = {
 			args = {},
 			callee = {
@@ -122,7 +106,7 @@ return {
 		subtype = "call",
 		type = "prefix"
 	},
-	["5.1"] = {
+	["6.1-Binary Expressions-Equality"] = {
 		left = {
 			inner = "input",
 			subtype = "identifier",
@@ -135,112 +119,7 @@ return {
 		},
 		type = "binary"
 	},
-	["5.2"] = {
-		left = {
-			operator = "#",
-			right = {
-				inner = "tbl",
-				subtype = "identifier",
-				type = "prefix"
-			},
-			type = "unary"
-		},
-		operator = "<=",
-		right = {
-			type = "number",
-			value = 3
-		},
-		type = "binary"
-	},
-	["5.3"] = {
-		left = {
-			left = {
-				type = "number",
-				value = 1
-			},
-			operator = "+",
-			right = {
-				type = "number",
-				value = 2
-			},
-			type = "binary"
-		},
-		operator = "-",
-		right = {
-			type = "number",
-			value = 3
-		},
-		type = "binary"
-	},
-	["5.4"] = {
-		left = {
-			left = {
-				left = {
-					left = {
-						type = "number",
-						value = 3
-					},
-					operator = "*",
-					right = {
-						type = "number",
-						value = 2
-					},
-					type = "binary"
-				},
-				operator = "/",
-				right = {
-					type = "number",
-					value = 3
-				},
-				type = "binary"
-			},
-			operator = "%",
-			right = {
-				type = "number",
-				value = 4
-			},
-			type = "binary"
-		},
-		operator = "//",
-		right = {
-			type = "number",
-			value = 2
-		},
-		type = "binary"
-	},
-	["5.5"] = {
-		left = {
-			left = {
-				inner = "a",
-				subtype = "identifier",
-				type = "prefix"
-			},
-			operator = "<",
-			right = {
-				inner = "b",
-				subtype = "identifier",
-				type = "prefix"
-			},
-			type = "binary"
-		},
-		operator = "and",
-		right = {
-			left = {
-				inner = "b",
-				subtype = "identifier",
-				type = "prefix"
-			},
-			operator = "<",
-			right = {
-				inner = "c",
-				subtype = "identifier",
-				type = "prefix"
-			},
-			type = "binary"
-		},
-		type = "binary"
-	},
-	["5.6"] = {
+	["6.10-Binary Expressions-Boolean OR"] = {
 		left = {
 			left = {
 				left = {
@@ -281,7 +160,7 @@ return {
 		},
 		type = "binary"
 	},
-	["5.7"] = {
+	["6.11-Binary Expressions-Concatenation"] = {
 		left = {
 			type = "string",
 			value = "Lorem"
@@ -293,7 +172,176 @@ return {
 		},
 		type = "binary"
 	},
-	["6.1"] = {
+	["6.2-Binary Expressions-Inquality"] = {
+		left = {
+			inner = "input",
+			subtype = "identifier",
+			type = "prefix"
+		},
+		operator = "~=",
+		right = {
+			type = "string",
+			value = "test"
+		},
+		type = "binary"
+	},
+	["6.3-Binary Expressions-Less"] = {
+		left = {
+			operator = "#",
+			right = {
+				inner = "tbl",
+				subtype = "identifier",
+				type = "prefix"
+			},
+			type = "unary"
+		},
+		operator = "<",
+		right = {
+			type = "number",
+			value = 3
+		},
+		type = "binary"
+	},
+	["6.4-Binary Expressions-Less-Equal"] = {
+		left = {
+			operator = "#",
+			right = {
+				inner = "tbl",
+				subtype = "identifier",
+				type = "prefix"
+			},
+			type = "unary"
+		},
+		operator = "<=",
+		right = {
+			type = "number",
+			value = 3
+		},
+		type = "binary"
+	},
+	["6.5-Binary Expressions-Greater"] = {
+		left = {
+			operator = "#",
+			right = {
+				inner = "tbl",
+				subtype = "identifier",
+				type = "prefix"
+			},
+			type = "unary"
+		},
+		operator = ">",
+		right = {
+			type = "number",
+			value = 3
+		},
+		type = "binary"
+	},
+	["6.6-Binary Expressions-Greater-Equal"] = {
+		left = {
+			operator = "#",
+			right = {
+				inner = "tbl",
+				subtype = "identifier",
+				type = "prefix"
+			},
+			type = "unary"
+		},
+		operator = ">=",
+		right = {
+			type = "number",
+			value = 3
+		},
+		type = "binary"
+	},
+	["6.7-Binary Expressions-Term"] = {
+		left = {
+			left = {
+				type = "number",
+				value = 1
+			},
+			operator = "+",
+			right = {
+				type = "number",
+				value = 2
+			},
+			type = "binary"
+		},
+		operator = "-",
+		right = {
+			type = "number",
+			value = 3
+		},
+		type = "binary"
+	},
+	["6.8-Binary Expressions-Factor"] = {
+		left = {
+			left = {
+				left = {
+					left = {
+						type = "number",
+						value = 3
+					},
+					operator = "*",
+					right = {
+						type = "number",
+						value = 2
+					},
+					type = "binary"
+				},
+				operator = "/",
+				right = {
+					type = "number",
+					value = 3
+				},
+				type = "binary"
+			},
+			operator = "%",
+			right = {
+				type = "number",
+				value = 4
+			},
+			type = "binary"
+		},
+		operator = "//",
+		right = {
+			type = "number",
+			value = 2
+		},
+		type = "binary"
+	},
+	["6.9-Binary Expressions-Boolean AND"] = {
+		left = {
+			left = {
+				inner = "a",
+				subtype = "identifier",
+				type = "prefix"
+			},
+			operator = "<",
+			right = {
+				inner = "b",
+				subtype = "identifier",
+				type = "prefix"
+			},
+			type = "binary"
+		},
+		operator = "and",
+		right = {
+			left = {
+				inner = "b",
+				subtype = "identifier",
+				type = "prefix"
+			},
+			operator = "<",
+			right = {
+				inner = "c",
+				subtype = "identifier",
+				type = "prefix"
+			},
+			type = "binary"
+		},
+		type = "binary"
+	},
+	["7.1-Control flow-Simple If"] = {
 		body = {
 			statements = {
 				{
@@ -325,7 +373,7 @@ return {
 		elseifs = {},
 		type = "if"
 	},
-	["6.10"] = {
+	["7.10-Control flow-Goto"] = {
 		body = {
 			statements = {
 				{
@@ -395,7 +443,7 @@ return {
 		},
 		type = "forRange"
 	},
-	["6.11"] = {
+	["7.11-Control flow-Do"] = {
 		body = {
 			statements = {
 				{
@@ -417,7 +465,7 @@ return {
 		},
 		type = "do"
 	},
-	["6.2"] = {
+	["7.2-Control flow-If-Else"] = {
 		body = {
 			statements = {
 				{
@@ -468,7 +516,7 @@ return {
 		elseifs = {},
 		type = "if"
 	},
-	["6.3"] = {
+	["7.3-Control flow-If-Elseif"] = {
 		body = {
 			statements = {
 				{
@@ -536,7 +584,7 @@ return {
 		},
 		type = "if"
 	},
-	["6.4"] = {
+	["7.4-Control flow-If-Elseif-Else"] = {
 		body = {
 			statements = {
 				{
@@ -623,7 +671,7 @@ return {
 		},
 		type = "if"
 	},
-	["6.5"] = {
+	["7.5-Control flow-While"] = {
 		body = {
 			statements = {
 				{
@@ -678,11 +726,13 @@ return {
 		},
 		type = "while"
 	},
-	["6.6"] = {
+	["7.6-Control flow-Repeat Until"] = {
 		body = {
 			statements = {
 				{
-					type = "localAssignment",
+					assign = "=",
+					isLocal = true,
+					type = "assignment",
 					values = {
 						{
 							call = {
@@ -703,13 +753,8 @@ return {
 									subtype = "identifier",
 									type = "prefix"
 								},
-								method = {
-									index = 7,
-									supertype = "token",
-									type = "identifier",
-									value = "read"
-								},
-								type = "callMethod"
+								method = "read",
+								type = "call"
 							},
 							subtype = "call",
 							type = "prefix"
@@ -740,7 +785,7 @@ return {
 		},
 		type = "repeatUntil"
 	},
-	["6.7"] = {
+	["7.7-Control flow-Numeric For"] = {
 		body = {
 			statements = {
 				{
@@ -772,7 +817,7 @@ return {
 		},
 		type = "forRange"
 	},
-	["6.8"] = {
+	["7.8-Control flow-Numeric For with Step"] = {
 		body = {
 			statements = {
 				{
@@ -808,7 +853,7 @@ return {
 		},
 		type = "forRange"
 	},
-	["6.9"] = {
+	["7.9-Control flow-Iterative For"] = {
 		body = {
 			statements = {
 				{
@@ -856,7 +901,9 @@ return {
 			"v"
 		}
 	},
-	["7.1"] = {
+	["8.1-Statements-Assignment"] = {
+		assign = "=",
+		isLocal = false,
 		type = "assignment",
 		values = {
 			{
@@ -890,8 +937,10 @@ return {
 			}
 		}
 	},
-	["7.2"] = {
-		type = "localAssignment",
+	["8.2-Statements-Local Assignment"] = {
+		assign = "=",
+		isLocal = true,
+		type = "assignment",
 		values = {
 			{
 				type = "number",
@@ -924,7 +973,30 @@ return {
 			}
 		}
 	},
-	["7.3"] = {
+	["8.3-Statements-Local Declaration"] = {
+		assign = "=",
+		isLocal = true,
+		type = "assignment",
+		values = {},
+		variables = {
+			{
+				inner = "a",
+				subtype = "identifier",
+				type = "prefix"
+			},
+			{
+				inner = "b",
+				subtype = "identifier",
+				type = "prefix"
+			},
+			{
+				inner = "c",
+				subtype = "identifier",
+				type = "prefix"
+			}
+		}
+	},
+	["8.4-Statements-Function definition"] = {
 		impl = {
 			body = {
 				statements = {
@@ -954,10 +1026,12 @@ return {
 		},
 		type = "funcDef"
 	},
-	["7.4"] = {
+	["8.5-Statements-Function definition on a table"] = {
 		statements = {
 			{
-				type = "localAssignment",
+				assign = "=",
+				isLocal = true,
+				type = "assignment",
 				values = {
 					{
 						type = "table",
@@ -1007,10 +1081,12 @@ return {
 		},
 		type = "block"
 	},
-	["7.5"] = {
+	["8.6-Statements-Method definition on a table"] = {
 		statements = {
 			{
-				type = "localAssignment",
+				assign = "=",
+				isLocal = true,
+				type = "assignment",
 				values = {
 					{
 						type = "table",
@@ -1060,7 +1136,7 @@ return {
 		},
 		type = "block"
 	},
-	["7.6"] = {
+	["8.7-Statements-Local function definition"] = {
 		impl = {
 			body = {
 				statements = {
@@ -1086,5 +1162,18 @@ return {
 		},
 		name = "test",
 		type = "localFuncDef"
+	},
+	["8.8-Statements-Return"] = {
+		type = "return",
+		values = {
+			{
+				type = "string",
+				value = "test"
+			},
+			{
+				type = "bool",
+				value = false
+			}
+		}
 	}
 }
