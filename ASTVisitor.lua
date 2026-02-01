@@ -34,8 +34,6 @@ function Visitor:visitStatement(statement)
 		self:visitAssignment(statement)
 	elseif statement.type == "call" then
 		self:visitFunctionCall(statement, true)
-	elseif statement.type == "callMethod" then
-		self:visitFunctionCall(statement, true)
 	elseif statement.type == "label" then
 		self:visitLabel(statement)
 	elseif statement.type == "break" then
@@ -54,7 +52,7 @@ function Visitor:visitStatement(statement)
 		self:visitForRange(statement)
 	elseif statement.type == "forIn" then
 		self:visitForIn(statement)
-	elseif statement.type == "FuncDef" then
+	elseif statement.type == "funcDef" then
 		self:visitFuncDef(statement)
 	elseif statement.type == "label" then
 		self:visitLabel(statement)
@@ -318,6 +316,7 @@ function Visitor:visitTableLiteral(literal)
 		self:visitExpression(field.value)
 		self:visitSymbol(",")
 	end
+	self:visitSymbol("}")
 end
 
 ---@param vararg? VarArgExpression If nil, this is a rest parameter in a func def

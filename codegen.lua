@@ -31,6 +31,9 @@ function codegen.generate(chunk, color)
 	function visitorPrototype:visitNumLiteral(literal)
 		table.insert(outputTokens, {type="number",value=literal.value})
 	end
+	function visitorPrototype:visitStringLiteral(literal)
+		table.insert(outputTokens, {type="string",value=literal.value})
+	end
 
 	local visitor = Visitor.create(visitorPrototype)
 	visitor:visitChunk(chunk)
@@ -57,6 +60,8 @@ function codegen.generate(chunk, color)
 		elseif token.type == "number" then
 			str = util.formatLiteral(token.value, color)
 			needsSpace = true
+		elseif token.type == "string" then
+			str = util.formatString(token.value, color, false, "lua5.1")
 		end
 
 		if needsSpace and output:sub(-1,-1):match("[a-zA-Z0-9]") and #output > 0 then

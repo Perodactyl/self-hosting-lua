@@ -541,7 +541,7 @@ local function runTest(name, test, showSuccess, alwaysPrintTestName)
 	return success, result
 end
 
-local targetTests, showAllResults, showAllNames, saveTree
+local targetTests, showAllResults, showAllNames, saveTree, saveCode
 
 local SHOW_TEST = arg[1]
 
@@ -635,6 +635,7 @@ elseif SHOW_TEST == "custom" and #arg == 2 then
 	showAllResults = true
 	showAllNames = true
 	saveTree = os.getenv("SAVE_TREE")
+	saveCode = os.getenv("SAVE_CODE")
 else
 	targetTests = tests
 	showAllResults = false
@@ -659,6 +660,16 @@ do
 					file:close()
 				else
 					print("Failed to save tree: " .. errmsg)
+				end
+			end
+			if success and saveCode then
+				local code = codegen.generate(result, false)
+				local file, errmsg = io.open(saveCode, "w")
+				if file then
+					file:write(code)
+					file:close()
+				else
+					print("Failed to save code: " .. errmsg)
 				end
 			end
 			testsRun = testsRun + 1
