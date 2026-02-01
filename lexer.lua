@@ -150,6 +150,35 @@ function Lexer:parseNextToken()
 			if self.charStream:isDone() then return nil end
 			if not self.charStream:nextIfEq("-") then return nil end
 			if not self.charStream:nextIfEq("-") then return nil end
+			if not self.charStream:nextIfEq("[") then return nil end
+
+			local level = 0
+			while self.charStream:nextIfEq("=") do
+				level = level + 1
+			end
+
+			if not self.charStream:nextIfEq("[") then return nil end
+
+			while not self.charStream:isDone() do
+				if self.charStream:nextIfEq("]") then
+					self.charStream:save()
+					if readN(self.charStream, level + 1) == ("="):rep(level) .. "]" then
+						self.charStream:continue()
+						break
+					else
+						self.charStream:recall()
+					end
+				else
+					self.charStream:next()
+				end
+			end
+
+			return false
+		end,
+		function()
+			if self.charStream:isDone() then return nil end
+			if not self.charStream:nextIfEq("-") then return nil end
+			if not self.charStream:nextIfEq("-") then return nil end
 
 			while self.charStream:peek() ~= "\n" do
 				self.charStream:next()

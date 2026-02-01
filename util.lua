@@ -441,6 +441,7 @@ function util.table(values, columnTitles, formatter)
 		for _,col in ipairs(columns) do
 			if #col.members < i then
 				table.insert(col.members, { value = "<nil>", width = 6 })
+				col.width = math.max(col.width, 6)
 			end
 		end
 	end
