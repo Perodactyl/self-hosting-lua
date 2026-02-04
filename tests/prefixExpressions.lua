@@ -26,6 +26,18 @@ return {
 			autotest = true,
 		},
 		{
+			name = "Method Call",
+			source = [[self:info("a")]],
+			parser = "parsePrefixExpression",
+			autotest = true,
+		},
+		{
+			name = "Access-Method Call",
+			source = [[self.helpGenerator:info("a")]],
+			parser = "parsePrefixExpression",
+			autotest = true,
+		},
+		{
 			name = "Group",
 			source = [[(1+1)]],
 			parser = "parsePrefixExpression",
@@ -34,6 +46,12 @@ return {
 		{
 			name = "IIFE",
 			source = [[(function() print("hi") end)()]],
+			parser = "parsePrefixExpression",
+			autotest = true,
+		},
+		{
+			name = "Group Call",
+			source = [[(print)("Hi")]],
 			parser = "parsePrefixExpression",
 			autotest = true,
 		},

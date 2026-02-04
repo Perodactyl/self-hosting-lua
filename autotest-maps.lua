@@ -1,4 +1,4 @@
---[[ File is auto generated 01/31/26 20:02:24 EST UTC-0500 ]]
+--[[ File is auto generated 02/04/26 15:50:00 EST UTC-0500 ]]
 return {
 	["4.1-Prefix Expressions-Identifier Access"] = {
 		inner = "testIdentifier",
@@ -52,7 +52,50 @@ return {
 		subtype = "call",
 		type = "prefix"
 	},
-	["4.5-Prefix Expressions-Group"] = {
+	["4.5-Prefix Expressions-Method Call"] = {
+		call = {
+			args = {
+				{
+					type = "string",
+					value = "a"
+				}
+			},
+			callee = {
+				inner = "self",
+				subtype = "identifier",
+				type = "prefix"
+			},
+			method = "info",
+			type = "call"
+		},
+		subtype = "call",
+		type = "prefix"
+	},
+	["4.6-Prefix Expressions-Access-Method Call"] = {
+		call = {
+			args = {
+				{
+					type = "string",
+					value = "a"
+				}
+			},
+			callee = {
+				left = {
+					inner = "self",
+					subtype = "identifier",
+					type = "prefix"
+				},
+				sub = "helpGenerator",
+				subtype = "dot",
+				type = "prefix"
+			},
+			method = "info",
+			type = "call"
+		},
+		subtype = "call",
+		type = "prefix"
+	},
+	["4.7-Prefix Expressions-Group"] = {
 		inner = {
 			left = {
 				type = "number",
@@ -68,7 +111,7 @@ return {
 		subtype = "group",
 		type = "prefix"
 	},
-	["4.6-Prefix Expressions-IIFE"] = {
+	["4.8-Prefix Expressions-IIFE"] = {
 		call = {
 			args = {},
 			callee = {
@@ -97,6 +140,28 @@ return {
 						rest = false
 					},
 					type = "funcDef"
+				},
+				subtype = "group",
+				type = "prefix"
+			},
+			type = "call"
+		},
+		subtype = "call",
+		type = "prefix"
+	},
+	["4.9-Prefix Expressions-Group Call"] = {
+		call = {
+			args = {
+				{
+					type = "string",
+					value = "Hi"
+				}
+			},
+			callee = {
+				inner = {
+					inner = "print",
+					subtype = "identifier",
+					type = "prefix"
 				},
 				subtype = "group",
 				type = "prefix"

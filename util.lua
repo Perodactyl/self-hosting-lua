@@ -92,16 +92,22 @@ function util.formatString(input, color, allowTruncation, escapeFormat)
 end
 
 function util.formatLiteral(input, color)
-	if color == false then return tostring(input) end
-	return '\x1b[38;2;250;179;135m' .. tostring(input) .. '\x1b[39m'
+	input = tostring(input)
+	if #input == 0 then return "" end
+	if color == false then return input end
+	return '\x1b[38;2;250;179;135m' .. input .. '\x1b[39m'
 end
 
 function util.formatKeyword(input, color)
-	if color == false then return tostring(input) end
-	return '\x1b[38;2;203;166;247;3m' .. tostring(input) .. '\x1b[39;23m'
+	input = tostring(input)
+	if #input == 0 then return "" end
+	if color == false then return input end
+	return '\x1b[38;2;203;166;247;3m' .. input .. '\x1b[39;23m'
 end
 
 function util.formatIdentifier(input, color)
+	input = tostring(input)
+	if #input == 0 then return "" end
 	if color == false then return input end
 	return '\x1b[38;2;180;190;254;4m' .. input .. '\x1b[39;24m'
 end
@@ -109,15 +115,27 @@ end
 ---@param tbl any
 ---@param color? boolean
 ---@param pretty? boolean
-function util.dump(tbl, color, pretty)
+---@param state? any[]
+function util.dump(tbl, color, pretty, state)
 	if color == nil then color = true end
+	if state == nil then state = {} end
+
 	local uglySp = pretty and "" or " "
 	local prettyLn = pretty and "\n" or ""
 	local prettyLnT = pretty and "\n\t" or ""
 	local prettySp = pretty and " " or ""
 
 	if type(tbl) == "table" then
-		local out = "{"
+		local statePresent, stateIndex = util.hasV(state, tbl)
+		if statePresent then
+			return util.formatKeyword("recursion("..stateIndex..")", color)
+		end
+		table.insert(state, tbl)
+
+		-- local out = util.formatKeyword("("..#state..")",color) .. " "
+		local out = ""
+
+		out = out .. "{"
 
 		local keys = {}
 		for k in pairs(tbl) do
@@ -140,10 +158,10 @@ function util.dump(tbl, color, pretty)
 			elseif type(k) == "string" and string.match(k, "^[a-zA-Z_][a-zA-Z0-9_]+$") then
 				keyStr = util.formatIdentifier(k, color) .. prettySp .. "=" .. prettySp
 			else
-				keyStr = '[' .. util.dump(k, color) .. ']' .. prettySp .. "=" .. prettySp
+				keyStr = '[' .. util.dump(k, color, pretty, state) .. ']' .. prettySp .. "=" .. prettySp
 			end
 
-			local valStr = util.dump(v, color, pretty)
+			local valStr = util.dump(v, color, pretty, state)
 			if pretty then
 				local lines = {}
 				for line in valStr:gmatch("[^\n]+") do
@@ -193,12 +211,23 @@ function util.isArray(tbl)
 	return true
 end
 
-function util.dumpJSON(tbl, color)
+---@param tbl any
+---@param color? boolean
+---@param state? any[] Used internally to track duplicate values
+function util.dumpJSON(tbl, color, state)
+	if state == nil then state = {} end
+
+	if type(tbl) == "table" and util.hasV(state, tbl) then
+		if color ~= false then return "\x1b[31;3m\"duplicate\"\x1b[39;23m"
+		else return "\"duplicate\"" end
+	end
+
 	if type(tbl) == "table" then
+		table.insert(state, tbl)
 		if util.isArray(tbl) then
 			local output = "["
 			for i,v in ipairs(tbl) do
-				output = output .. util.dumpJSON(v, color)
+				output = output .. util.dumpJSON(v, color, state)
 				if i ~= #tbl then output = output .. "," end
 			end
 			output = output .. "]"
@@ -209,7 +238,7 @@ function util.dumpJSON(tbl, color)
 				output = output
 					.. util.formatString(k, color, false, "json")
 					.. ':'
-					.. util.dumpJSON(v, color)
+					.. util.dumpJSON(v, color, state)
 
 				if next(tbl,k) ~= nil then output = output .. "," end
 			end
@@ -222,7 +251,11 @@ function util.dumpJSON(tbl, color)
 		return util.formatLiteral(tbl, color)
 	elseif type(tbl) == "nil" then
 		return util.formatKeyword("null", color)
+	elseif type(tbl) == "function" then
+		if color ~= false then return "\x1b[31;3m\"" ..tostring(tbl) .. "\"\x1b[39;23m"
+		else return "\"" .. tostring(tbl) .. "\"" end
 	end
+	return tostring(tbl)
 end
 
 function util.hasK(tbl, key)
@@ -233,8 +266,8 @@ function util.hasK(tbl, key)
 end
 
 function util.hasV(tbl, val)
-	for _,v in pairs(tbl) do
-		if v == val then return true end
+	for k,v in pairs(tbl) do
+		if v == val then return true, k end
 	end
 	return false
 end
@@ -297,6 +330,7 @@ end
 ---@param truncationIndicator? T
 ---@return T[]
 function util.collect(next, j, truncationIndicator)
+	require("debugger")()
 	local output = {}
 	local i = 1
 	while true do
@@ -317,6 +351,31 @@ function util.collect(next, j, truncationIndicator)
 	return output
 end
 
+---@generic T, A
+---@param value T[]
+---@param startAccumulator A
+---@param reducer fun(value: T, accumulator: A, index: integer): A
+---@return A
+function util.reduce(value, startAccumulator, reducer)
+	local accumulator = startAccumulator
+	for i,v in ipairs(value) do
+		accumulator = reducer(v, accumulator, i)
+	end
+	return accumulator
+end
+
+---@generic I, O
+---@param list I[]
+---@param mapper fun(value: I, index: integer): O
+---@return O[]
+function util.map(list, mapper)
+	local output = {}
+	for i,v in ipairs(list) do
+		output[i] = mapper(v,i)
+	end
+	return output
+end
+
 
 ---@generic T
 ---@param tbl (T|T[])[]
@@ -325,6 +384,24 @@ function util.flatten(tbl)
 	local output = {}
 	for _,v in ipairs(tbl) do
 		if type(v) == "table" then
+			for _,v2 in ipairs(v) do
+				table.insert(output,v2)
+			end
+		else
+			table.insert(output,v)
+		end
+	end
+	return output
+end
+
+---@generic T
+---@param tbl (T|T[])[]
+---@return T[]
+function util.flattenIfTagged(tbl)
+	local output = {}
+	for _,v in ipairs(tbl) do
+		---@diagnostic disable-next-line: undefined-field
+		if type(v) == "table" and v.__flattenable == true then
 			for _,v2 in ipairs(v) do
 				table.insert(output,v2)
 			end
@@ -376,6 +453,10 @@ function util.tokenListFormatter(key, row, color)
 		else
 			if color then return "\x1b[31mUnparsed\x1b[39m" else return "Unparsed" end
 		end
+	end
+
+	if key == "span" then
+		return row.span:stringify(color)
 	end
 end
 
@@ -539,6 +620,24 @@ function util.toCase(input, targetCase)
 		end
 	end
 	return output
+end
+
+---@param input string
+---@param count? integer
+function util.indent(input, count)
+	if count == nil then count = 1 end
+	return input:gsub("\n", "\n" .. ("\t"):rep(count))
+end
+
+---@generic T
+---@param value T|Error
+---@return T
+---@overload fun(value: T|Error, span: Span): T, Span
+function util.try(value, span)
+	if type(value) == "table" and value.isError then
+		error(value)
+	end
+	return value, span
 end
 
 return util

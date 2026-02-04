@@ -11,8 +11,10 @@ local LazyStream = require("lazyStream")
 ---@field charStream StringStream
 local Lexer = {}
 
-function Lexer.new(input)
-	local lexer = { charStream = LazyStream.fromString(input) }
+---@param source Source
+---@return Lexer
+function Lexer.new(source)
+	local lexer = { charStream = LazyStream.fromString(source.sourceText, source) }
 	return setmetatable(lexer, {
 		__index = Lexer
 	})
@@ -27,21 +29,25 @@ local function readN(charStream, n)
 	return out
 end
 
+---@param charStream LazyStream
 local function parsePaths(charStream, paths)
-	local output = {}
+	local output = {__flattenable = true}
 	table.sort(paths, function(a,b) return #a.match > #b.match end)
 	for _,path in ipairs(paths) do
-		table.insert(output, function()
+		table.insert(output, {path.match, function()
 			if path.match == readN(charStream, #path.match) then
 				if path.word then
 					local ch = charStream:peek()
-					if ch ~= nil and ch:match("[a-zA-Z0-9_]") then return nil end
+					if ch ~= nil and ch:match("[a-zA-Z0-9_]") then
+						return charStream:errorHere(true, "Not on word boundary")
+					end
 				end
 				local result = util.deepCopy(path.result)
 				if path.autoSet ~= nil then result[path.autoSet] = path.match end
 				return result
 			end
-		end)
+			return charStream:errorHere(true, "Does not match")
+		end})
 	end
 	return output
 end
@@ -51,13 +57,16 @@ local function whiteSpace(charStream)
 end
 
 ---@param allowRichFormat boolean Enables hex literals, scientific notation, and floats
+---@return Token | Error, Span
 function Lexer:parseNumber(allowRichFormat)
-	return self.charStream:scope("Number",
-		"Hexadecimal Number Literal", function()
-			if not allowRichFormat then return nil, "Not a rich number" end
+	return self.charStream:scope("Number", {
+		{"Hexadecimal Number Literal", function()
+			if not allowRichFormat then return self.charStream:errorHere(true, "Not a rich number") end
+
 			if not readN(self.charStream, 2):match("0[xX]") then
-				return nil, "Not beginning with 0x or 0X"
+				return self.charStream:errorHere(true, "Not beginning with 0x or 0X")
 			end
+
 			local hasAnyDigits = false
 			local value = 0
 			local multiplier = 1
@@ -81,11 +90,13 @@ function Lexer:parseNumber(allowRichFormat)
 					end
 					hasAnyDigits = true
 				elseif char == "." and allowRichFormat then
-					if place ~= math.huge then return nil, "Multiple dots in decimal" end
+					if place ~= math.huge then return self.charStream:errorHere(false, "Multiple dots in hex frac") end
 					place = 0
 				elseif hasAnyDigits and (char == "p" or char == "P") and allowRichFormat then
 					local exponent = self:parseNumber(false)
-					if not exponent then return nil, "Failed to parse exponent" end
+					if exponent.isError then
+						return exponent:extend("Failed to parse exponent", self.charStream:here()):unrecoverable()
+					end
 					multiplier = multiplier * 2 ^ exponent.value
 				else
 					self.charStream:recall()
@@ -96,10 +107,10 @@ function Lexer:parseNumber(allowRichFormat)
 			if hasAnyDigits then
 				return {type="number",value=value * multiplier}
 			else
-				return nil, "No digits"
+				return self.charStream:errorHere(true, "No digits")
 			end
-		end,
-		"Decimal Number Literal", function()
+		end},
+		{"Decimal Number Literal", function()
 			local hasAnyDigits = false
 			local value = 0
 			local multiplier = 1
@@ -123,11 +134,13 @@ function Lexer:parseNumber(allowRichFormat)
 					end
 					hasAnyDigits = true
 				elseif char == "." and allowRichFormat then
-					if place ~= math.huge then return nil, "Multiple dots in decimal" end
+					if place ~= math.huge then return self.charStream:errorHere(not hasAnyDigits, "Multiple dots in decimal") end
 					place = 0
 				elseif hasAnyDigits and (char == "e" or char == "E") and allowRichFormat then
 					local exponent = self:parseNumber(false)
-					if not exponent then return nil, "Failed to parse exponent" end
+					if exponent.isError then
+						return exponent:extend("Failed to parse exponent", self.charStream:here()):unrecoverable()
+					end
 					multiplier = multiplier * 10 ^ exponent.value
 				else
 					self.charStream:recall()
@@ -138,26 +151,27 @@ function Lexer:parseNumber(allowRichFormat)
 			if hasAnyDigits then
 				return {type="number",value=value * multiplier}
 			else
-				return nil, "No digits"
+				return self.charStream:errorNext(true, "No digits")
 			end
-		end
-	)
+		end},
+	})
 end
 
+---@return Token|false|nil, Span
 function Lexer:parseNextToken()
-	return self.charStream:scope(table.unpack(util.flatten({
-		function()
-			if self.charStream:isDone() then return nil end
-			if not self.charStream:nextIfEq("-") then return nil end
-			if not self.charStream:nextIfEq("-") then return nil end
-			if not self.charStream:nextIfEq("[") then return nil end
+	if self.charStream:isDone() then return nil, self.charStream:here() end
+	local output, span = self.charStream:scope("token", util.flattenIfTagged({
+		{"Long Comment", function()
+			self.charStream:expect("-", true)
+			self.charStream:expect("-", true)
+			self.charStream:expect("[", true)
 
 			local level = 0
 			while self.charStream:nextIfEq("=") do
 				level = level + 1
 			end
 
-			if not self.charStream:nextIfEq("[") then return nil end
+			self.charStream:expect("[", true)
 
 			while not self.charStream:isDone() do
 				if self.charStream:nextIfEq("]") then
@@ -174,20 +188,20 @@ function Lexer:parseNextToken()
 			end
 
 			return false
-		end,
-		function()
-			if self.charStream:isDone() then return nil end
-			if not self.charStream:nextIfEq("-") then return nil end
-			if not self.charStream:nextIfEq("-") then return nil end
+		end},
+		{"Line Comment", function()
+			self.charStream:expect("-", true)
+			self.charStream:expect("-", true)
 
 			while self.charStream:peek() ~= "\n" do
 				self.charStream:next()
 			end
 			return false
-		end,
-		function()
-			if self.charStream:isDone() then return nil end
-			if not self.charStream:peek():match("['\"[]") then return nil end
+		end},
+		{"String", function()
+			if not self.charStream:peek():match("['\"[]") then
+				return self.charStream:errorNext(true, "Missing quote or long brace")
+			end
 
 			local stringContents = ""
 			if self.charStream:nextIfEq("[") then
@@ -200,7 +214,11 @@ function Lexer:parseNextToken()
 
 				if not self.charStream:nextIfEq("[") then
 					self.charStream:recall()
-					return
+					if level > 0 then
+						return self.charStream:errorHere(false, "Unclosed long brace")
+					else
+						return self.charStream:errorHere(true, "Not a long brace")
+					end
 				end
 				self.charStream:continue()
 
@@ -265,7 +283,7 @@ function Lexer:parseNextToken()
 							while not self.charStream:nextIfEq("}") do
 								local digit = self.charStream:next()
 								if not digit or not digit:match("[0-9a-fA-F]") then
-									error("Unclosed unicode escape")
+									return self.charStream:errorHere(false, "Unclosed unicode escape")
 								end
 								numParts = numParts .. digit
 							end
@@ -273,19 +291,18 @@ function Lexer:parseNextToken()
 						elseif escapeChar == "z" then
 							whiteSpace(self.charStream)
 						else
-							error("Invalid escape: \\" .. escapeChar)
+							return self.charStream:errorHere(false, "Invalid escape: \\" .. escapeChar)
 						end
 					else
 						stringContents = stringContents .. self.charStream:next()
 					end
 				end
 			end
-			-- TODO escape sequences
 			return { type = "string", value = stringContents }
-		end,
-		"Number Literal", function()
+		end},
+		{"Number", function()
 			return self:parseNumber(true)
-		end,
+		end},
 		parsePaths(self.charStream, {
 			{ match = "{",  result = { type = "symbol" }, autoSet = "value" },
 			{ match = "}",  result = { type = "symbol" }, autoSet = "value" },
@@ -346,9 +363,10 @@ function Lexer:parseNextToken()
 			{ match = "while",    result = { type = "keyword" }, autoSet = "value", word=true },
 			{ match = "local",    result = { type = "keyword" }, autoSet = "value", word=true },
 		}),
-		function()
-			if self.charStream:isDone() then return nil end
-			if not self.charStream:peek():match("[a-zA-Z_]") then return nil end
+		{"Identifier", function()
+			if not self.charStream:peek():match("[a-zA-Z_]") then
+				return self.charStream:errorHere(true, "Does not start with a valid character")
+			end
 
 			local ident = ""
 			while true do
@@ -359,32 +377,30 @@ function Lexer:parseNextToken()
 				else break end
 			end
 			return { type = "identifier", value = ident }
-		end,
-		function()
-			if not self.charStream:isDone() then
-				return { type = "unknown", value = self.charStream:next() }
-			end
-		end
-	})) --[[@as any]])
+		end},
+	}))
+	return output, span
 end
 
----@return fun(): Token | nil
+---@return (fun(): Token | Error | nil, Span)
 function Lexer:createTokenGenerator()
 	local index = 0
 	return function()
 		whiteSpace(self.charStream)
-		local result = self:parseNextToken()
+		local result, span = self:parseNextToken()
 		while result == false do --Encountered a comment
 			whiteSpace(self.charStream)
-			result = self:parseNextToken()
+			result, span = self:parseNextToken()
 		end
 		-- print("Tokenizer: Generated " .. util.dump(result))
+		index = index + 1
 		if result ~= nil then
-			index = index + 1
+			if result.isError then return result, span end
 			result.supertype = "token"
 			result.index = index
+			result.span = span
 		end
-		return result
+		return result, span
 	end
 end
 

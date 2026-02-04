@@ -42,6 +42,9 @@ If you want to demonstrate its ability to parse stuff, use these commands:
 # Outputs result of testing that file.lua successfully parses
 lua main.lua "custom" path/to/file.lua
 
+# Same as above, but compile stdin (which is the string after <<<).
+lua main.lua "custom" - <<< 'print("Hello, World!")'
+
 # Same as above, but also writes a json file of the AST
 SAVE_TREE=/tmp/tree.json lua main.lua "custom" path/to/file.lua
 
