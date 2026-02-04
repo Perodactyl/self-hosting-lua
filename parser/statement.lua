@@ -84,9 +84,9 @@ function Parser:parseStatement()
 					if not localKw then
 						return self.tokenStream:errorHere(true, "Not a local; must have values")
 					end
-					local assign = self.tokenStream:next()
+					local assign = self.tokenStream:peek()
 					if assign ~= nil and assign.type == "assign" then
-						return self.tokenStream:errorHere(true, "Assignment operator found")
+						return self.tokenStream:errorNext(true, "Assignment operator found")
 					end
 					return {assign="=", values={}}
 				end},
@@ -350,14 +350,18 @@ function Parser:parseStatement()
 			}
 		end},
 		{"Return", function() --return
-			if not self.tokenStream:nextIfEq({type="keyword",value="return"}) then
-				return self.tokenStream:errorNext(true, "No return kw")
-			end
+			self.tokenStream:expect({type="keyword",value="return"}, true)
 
 			local values =
 				self:parseSequence(self.parseExpression, {type="symbol",value=","}, "return values")
 
-			if values.isError then return values end
+			if values.isError then
+				if values.programInfo ~= nil and values.programInfo.length == 0 then
+					values = {}
+				else
+					return values
+				end
+			end
 			return {
 				type = "return",
 				values = values,

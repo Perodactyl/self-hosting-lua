@@ -5,6 +5,7 @@ local util = require("util")
 ---@field message string
 ---@field children Error[] Child is a lower-level error.
 ---@field span Span
+---@field programInfo? table
 local Error = { isError = true }
 
 ---@alias SpanUnit "char" | "token"
@@ -112,7 +113,9 @@ function Span:cast()
 	if stop then
 		stopRef  = stop.span
 	else
-		error("Span stops at token " .. self.stop .. ", which is not generated yet", 2)
+		-- error("Span stops at token " .. self.stop .. ", which is not generated yet", 2)
+		print(debug.traceback("Span stops at token " .. self.stop .. ", which is not generated yet", 2))
+		return Span.point(1, self.source, "char")
 	end
 
 	if startRef.source ~= stopRef.source then error("Reference spans come from different sources", 2) end

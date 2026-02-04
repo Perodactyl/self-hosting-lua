@@ -40,7 +40,9 @@ function Parser:parseSequence(memberParser, separator, name)
 			self.tokenStream:recall()
 			local debugName = "sequence"
 			if name then debugName = debugName .. " '" .. name .. "'" end
-			return parseResult:extend("On element " .. #output+1 .. " of " .. debugName)
+			local e,s = parseResult:extend("On element " .. #output+1 .. " of " .. debugName)
+			e.programInfo = {length=#output}
+			return e,s
 		end
 
 		table.insert(output, parseResult)
