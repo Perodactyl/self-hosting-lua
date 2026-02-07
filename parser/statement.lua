@@ -315,7 +315,7 @@ function Parser:parseStatement()
 			local name
 			if not localKw then
 				name = {
-					base = self.tokenStream:next().value, --todo handle eof and stuff
+					base = {type="prefix",subtype="identifier",inner=self.tokenStream:next().value}, --todo handle eof and stuff
 					accesses = {},
 					method = nil,
 				}
@@ -393,6 +393,12 @@ function Parser:parseStatement()
 			return {
 				type = "goto",
 				destination = name.value,
+			}
+		end},
+		{"Semicolon", function()
+			self.tokenStream:expect({type="symbol",value=";"}, true)
+			return {
+				type = "delimiter"
 			}
 		end},
 	})

@@ -29,6 +29,7 @@ do
 	---@class Block
 	---@field statements Statement[]
 	---@field returnStatement? ReturnStatement
+	---@field scope? Scope
 
 	--- retstat ::= return [explist] [';']
 	---@alias ReturnStatement Expression[] explist
@@ -140,7 +141,7 @@ do
 
 		--- funcname ::= Name {'.' Name} [':' Name], so a.b:c populates all 3 fields
 		---@class FuncName
-		---@field base Identifier
+		---@field base PrefixIdentifierAccessExpression
 		---@field accesses Identifier[]
 		---@field method? Identifier
 	end
@@ -197,6 +198,7 @@ do
 		---@field type "prefix"
 		---@field subtype "identifier"
 		---@field inner Identifier
+		---@field binding? ScopeMember
 
 		--- prefixexp '[' exp ']' branch of var
 		---@class PrefixIndexAccessExpression

@@ -1,4 +1,5 @@
 ---@diagnostic disable: unused-local
+local util = require("util")
 
 ---All default methods just visit all children
 ---@class Visitor
@@ -18,6 +19,7 @@ end
 
 ---@param block Block
 function Visitor:visitBlock(block)
+	if block.scope ~= nil then self:visitScope(block.scope) end
 	for _,statement in ipairs(block.statements) do
 		self:visitStatement(statement)
 	end
@@ -68,7 +70,11 @@ end
 function Visitor:visitAssignment(assignment)
 	if assignment.isLocal then self:visitKeyword("local") end
 	for i,var in ipairs(assignment.variables) do
-		self:visitAccess(var)
+		if assignment.isLocal then
+			self:visitDefinition(var --[[@as PrefixIdentifierAccessExpression]], true)
+		else
+			self:visitAccess(var)
+		end
 		if i ~= #assignment.variables then
 			self:visitSymbol(",")
 		end
@@ -203,7 +209,7 @@ end
 function Visitor:visitFuncDef(funcDef)
 	if funcDef.isLocal then self:visitKeyword("local") end
 	self:visitKeyword("function")
-	self:visitIdentifier(funcDef.name.base)
+	self:visitDefinition(funcDef.name.base, funcDef.isLocal)
 	for _,access in ipairs(funcDef.name.accesses) do
 		self:visitSymbol(".")
 		self:visitIdentifier(access)
@@ -264,7 +270,7 @@ end
 
 ---@param ident string
 function Visitor:visitIdentifier(ident)
-
+	util.eprint("Visiting " .. ident)
 end
 
 ---@param symbol Symbol
@@ -324,6 +330,16 @@ function Visitor:visitVarArg(vararg)
 	self:visitSymbol("...")
 end
 
+---@param scope Scope
+function Visitor:visitScope(scope)
+
+end
+
+---@param binding ScopeMember
+function Visitor:visitBinding(binding)
+
+end
+
 ---@param funcDef FunctionExpression
 function Visitor:visitFuncDefExpr(funcDef)
 	self:visitKeyword("function")
@@ -346,7 +362,18 @@ end
 
 ---@param access PrefixAccessExpression
 function Visitor:visitAccess(access)
-	if access.subtype == "identifier" then self:visitIdentifier(access.inner)
+	print("visting access " .. util.dump(access))
+	if access.subtype == "identifier" then
+		util.eprint("Visiting access of identifier")
+		if access.binding ~= nil then
+			util.eprint("Visiting " .. util.dump(access))
+
+			self:visitBinding(access.binding)
+			self:visitIdentifier(access.binding.name)
+		else
+			util.eprint("\x1b[33mIdentifier is not bound to a scope: " .. access.inner .. "\x1b[39m")
+			self:visitIdentifier(access.inner)
+		end
 	elseif access.subtype == "dot" then
 		self:visitPrefix(access.left)
 		self:visitSymbol(".")
@@ -356,6 +383,20 @@ function Visitor:visitAccess(access)
 		self:visitSymbol("[")
 		self:visitExpression(access.sub)
 		self:visitSymbol("]")
+	end
+end
+
+---@param define PrefixIdentifierAccessExpression
+---@param isLocal boolean
+function Visitor:visitDefinition(define, isLocal)
+	if define.binding ~= nil then
+		-- util.eprint("Visiting " .. util.dump(access))
+
+		self:visitBinding(define.binding)
+		self:visitIdentifier(define.binding.name)
+	else
+		-- util.eprint("\x1b[33mIdentifier is not bound to a scope: " .. access.inner .. "\x1b[39m")
+		self:visitIdentifier(define.inner)
 	end
 end
 

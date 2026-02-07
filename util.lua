@@ -629,6 +629,8 @@ function util.indent(input, count)
 	return input:gsub("\n", "\n" .. ("\t"):rep(count))
 end
 
+function util.eprint(...) io.stderr:write(..., "\n") end
+
 ---@generic T
 ---@param value T|Error
 ---@return T
