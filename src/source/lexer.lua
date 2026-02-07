@@ -303,7 +303,7 @@ function Lexer:parseNextToken()
 		{"Number", function()
 			return self:parseNumber(true)
 		end},
-		parsePaths(self.charStream, {
+		parsePaths(self.charStream --[[@as LazyStream]], {
 			{ match = "{",  result = { type = "symbol" }, autoSet = "value" },
 			{ match = "}",  result = { type = "symbol" }, autoSet = "value" },
 			{ match = "[",  result = { type = "symbol" }, autoSet = "value" },

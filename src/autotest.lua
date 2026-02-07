@@ -4,7 +4,7 @@ local autotest = {}
 local mappings = {}
 
 function autotest.save()
-	local file = io.open("autotest-maps.lua", "w")
+	local file = io.open("generated/autotest-maps.lua", "w")
 	if file then
 		file:write("--[[ File is auto generated " .. os.date("%D %T %Z UTC%z") .. " ]]\nreturn " .. util.dump(mappings, false, true))
 		file:close()
@@ -12,7 +12,7 @@ function autotest.save()
 end
 
 function autotest.load()
-	local success, result = pcall(require, "autotest-maps")
+	local success, result = pcall(require, "generated.autotest-maps")
 	if not success then
 		print(result)
 	elseif type(result) == "boolean" then

@@ -1,7 +1,6 @@
 local util = require("util")
-local errorCtl = require("error")
-local Span = errorCtl.Span
-local Error = errorCtl.Error
+local Span = require("source.span")
+local Error = require("source.error")
 
 ---Temporary fix because LuaLS doesn't understand that class generics should be visible in fields.
 ---@alias T Token
@@ -41,7 +40,7 @@ end
 ---@field private buffer string
 ---@field private recallPoints integer[]
 ---@field private index integer
-local StringStream = setmetatable({}, {__index = LazyStream})
+local StringStream = setmetatable({}, {__index = LazyStream}) --[[@as StringStream]]
 
 function StringStream:next()
 	self.index = self.index + 1
@@ -153,7 +152,7 @@ function LazyStream:recall()
 	if #self.recallPoints == 0 then error("Recall not matched to Save", 2) end
 	local stop = self.index
 	self.index = table.remove(self.recallPoints)
-	return errorCtl.Span.new(self.index,stop,self.source,self.unit)
+	return Span.new(self.index,stop,self.source,self.unit)
 end
 
 ---@return Span
@@ -161,7 +160,7 @@ function LazyStream:continue()
 	-- if self.next == LazyStream.next then print("continue " .. util.dump(self.recallPoints) .. " staying at " .. self.index) end
 	if #self.recallPoints == 0 then error("Continue not matched to Save", 2) end
 	local start,stop = table.remove(self.recallPoints), self.index
-	return errorCtl.Span.new(start,stop,self.source,self.unit)
+	return Span.new(start,stop,self.source,self.unit)
 end
 
 ---@return Span

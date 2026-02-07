@@ -1,17 +1,6 @@
 local Visitor = require("ASTVisitor")
-local util = require("util")
-
----@class ScopeVariable
----@field type "variable"
----@field name string
----@field external boolean If true, cannot be renamed
-
----@alias ScopeMember ScopeVariable
----@alias ScopeMemberType "variable"
 
 ---@class Scope
----@field parent? Scope
----@field members ScopeMember[]
 local Scope = {}
 
 ---@param parent? Scope
@@ -23,7 +12,6 @@ end
 ---@param member ScopeMember
 function Scope:bind(member)
 	table.insert(self.members, member)
-	print("created " .. util.dump(member))
 	return member
 end
 
@@ -33,7 +21,6 @@ end
 function Scope:ref(type, name)
 	for _,member in ipairs(self.members) do
 		if member.type == type and member.name == name then
-			print("referenced " .. util.dump(member))
 			return member
 		end
 	end

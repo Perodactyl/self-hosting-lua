@@ -1,4 +1,4 @@
---[[ File is auto generated 02/04/26 15:50:00 EST UTC-0500 ]]
+--[[ File is auto generated 02/06/26 23:00:00 EST UTC-0500 ]]
 return {
 	["4.1-Prefix Expressions-Identifier Access"] = {
 		inner = "testIdentifier",
@@ -1087,7 +1087,11 @@ return {
 		},
 		name = {
 			accesses = {},
-			base = "test"
+			base = {
+				inner = "test",
+				subtype = "identifier",
+				type = "prefix"
+			}
 		},
 		type = "funcDef"
 	},
@@ -1139,7 +1143,11 @@ return {
 					accesses = {
 						"test"
 					},
-					base = "lib"
+					base = {
+						inner = "lib",
+						subtype = "identifier",
+						type = "prefix"
+					}
 				},
 				type = "funcDef"
 			}
@@ -1193,7 +1201,11 @@ return {
 				},
 				name = {
 					accesses = {},
-					base = "lib",
+					base = {
+						inner = "lib",
+						subtype = "identifier",
+						type = "prefix"
+					},
 					method = "test"
 				},
 				type = "funcDef"

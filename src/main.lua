@@ -1,12 +1,11 @@
+package.path = "src/?.lua;src/?/init.lua;" .. package.path
+
 local Parser = require("parser")
-local codegen = require("codegen")
+local transformer = require("transformer")
 local autotest = require("autotest")
 local util = require("util")
 local tests = require("tests")
--- local errorCtl = require("error")
 local Source = require("source")
-
--- local Span,Error = errorCtl.Span, errorCtl.Error
 
 autotest.load()
 
@@ -25,7 +24,7 @@ local function runTest(name, test, showSuccess, alwaysPrintTestName)
 	local source = Source.new("=test", test.source)
 	local parser = Parser.new(source)
 
-	local uncrashed, result, resultReason = xpcall(parser[test.parser], debug.traceback, parser)
+	local uncrashed, result = xpcall(parser[test.parser], debug.traceback, parser)
 
 	local success = uncrashed and result ~= nil and not result.isError and (test.result == nil or util.deepEq(test.result, result))
 
@@ -224,7 +223,9 @@ do
 				end
 			end
 			if success and saveCode then
-				local code = codegen.generate(result, false)
+				local annotatedTokens = transformer.retokenize(result)
+				local code = transformer.serializeTokens(annotatedTokens, false)
+
 				local file, errmsg = io.open(saveCode, "w")
 				if file then
 					file:write(code)

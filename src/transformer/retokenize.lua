@@ -1,25 +1,4 @@
 local Visitor = require("ASTVisitor")
--- local util = require("util")
-
----@class TokenAnnotation
----@field type "token"
----@field inner Token
-
----@class BlockStartAnnotation
----@field type "blockStart"
----@field depth integer
-
----@class BlockEndAnnotation
----@field type "blockEnd"
----@field depth integer
-
----@class StatementStartAnnotation
----@field type "statementStart"
-
----@class StatementEndAnnotation
----@field type "statementEnd"
-
----@alias Annotation TokenAnnotation | BlockStartAnnotation | BlockEndAnnotation | StatementStartAnnotation | StatementEndAnnotation
 
 ---@param chunk Chunk
 ---@return Annotation[]
@@ -36,7 +15,6 @@ return function(chunk)
 	end
 	function proto:visitIdentifier(ident)
 		table.insert(output, {type="token",inner={type="identifier",value=ident}})
-		print("Outputted token " .. ident)
 	end
 	function proto:visitAssign(assign)
 		table.insert(output, {type="token",inner={type="assign",value=assign}})

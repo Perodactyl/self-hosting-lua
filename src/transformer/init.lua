@@ -1,5 +1,3 @@
-local Visitor = require("ASTVisitor")
-
 ---@class Transformer
 local Transformer = {}
 

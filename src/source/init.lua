@@ -1,11 +1,7 @@
-local Lexer = require("lexer")
+local Lexer = require("source.lexer")
 local LazyStream = require("lazyStream")
 
 ---@class Source
----@field name Chunkname
----@field private chunkDisplayName string
----@field sourceText string
----@field sourceTokens LazyStream<Token>
 local Source = {}
 
 ---@param name Chunkname

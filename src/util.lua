@@ -216,6 +216,7 @@ end
 ---@param state? any[] Used internally to track duplicate values
 function util.dumpJSON(tbl, color, state)
 	if state == nil then state = {} end
+	if color == nil then color = false end
 
 	if type(tbl) == "table" and util.hasV(state, tbl) then
 		if color ~= false then return "\x1b[31;3m\"duplicate\"\x1b[39;23m"

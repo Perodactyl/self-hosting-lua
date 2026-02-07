@@ -270,7 +270,7 @@ end
 
 ---@param ident string
 function Visitor:visitIdentifier(ident)
-	util.eprint("Visiting " .. ident)
+
 end
 
 ---@param symbol Symbol
@@ -362,16 +362,12 @@ end
 
 ---@param access PrefixAccessExpression
 function Visitor:visitAccess(access)
-	print("visting access " .. util.dump(access))
 	if access.subtype == "identifier" then
-		util.eprint("Visiting access of identifier")
 		if access.binding ~= nil then
-			util.eprint("Visiting " .. util.dump(access))
-
 			self:visitBinding(access.binding)
 			self:visitIdentifier(access.binding.name)
 		else
-			util.eprint("\x1b[33mIdentifier is not bound to a scope: " .. access.inner .. "\x1b[39m")
+			-- util.eprint("\x1b[33mIdentifier is not bound to a scope: " .. access.inner .. "\x1b[39m")
 			self:visitIdentifier(access.inner)
 		end
 	elseif access.subtype == "dot" then
@@ -390,12 +386,9 @@ end
 ---@param isLocal boolean
 function Visitor:visitDefinition(define, isLocal)
 	if define.binding ~= nil then
-		-- util.eprint("Visiting " .. util.dump(access))
-
 		self:visitBinding(define.binding)
 		self:visitIdentifier(define.binding.name)
 	else
-		-- util.eprint("\x1b[33mIdentifier is not bound to a scope: " .. access.inner .. "\x1b[39m")
 		self:visitIdentifier(define.inner)
 	end
 end
