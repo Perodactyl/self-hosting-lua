@@ -22,6 +22,14 @@ end
 
 local function runTest(name, test, showSuccess, alwaysPrintTestName)
 	local source = Source.new("=test", test.source)
+	if true then
+		source.sourceTokens:save()
+		while not source.sourceTokens:isDone() do
+			source.sourceTokens:next()
+		end
+		source.sourceTokens:recall()
+		os.exit()
+	end
 	local parser = Parser.new(source)
 
 	local uncrashed, result = xpcall(parser[test.parser], debug.traceback, parser)
@@ -53,7 +61,7 @@ local function runTest(name, test, showSuccess, alwaysPrintTestName)
 
 		if uncrashed then -- Code did not crash, but did not parse
 			local tokens = source.sourceTokens.buffer
-			print((util.table(tokens, {"index", "type", "value", "span"}, util.tokenListFormatter)))
+			print((util.prettyOutput.table(tokens, {"index", "type", "value", "span"}, util.prettyOutput.tokenListFormatter)))
 			print("")
 
 			if not result.isError and not util.deepEq(test.result, result) then
@@ -83,7 +91,7 @@ local function runTest(name, test, showSuccess, alwaysPrintTestName)
 			if result.isError then
 				print(result:stringify())
 			else
-				print("Result: " .. util.dump(result, true, true))
+				print("Result: " .. util.prettyOutput.dump(result, true, true))
 			end
 			print("\n")
 		else

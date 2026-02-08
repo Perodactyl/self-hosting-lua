@@ -1,12 +1,7 @@
 local tableUtils = require("util.table")
 local List = require("util.list")
 local LazyStream = require("lazyStream")
-
----@alias Token { type: "string", value: string, [any]:any } | { type: "number", value: number, [any]:any } | { type: "keyword", value: Keyword, [any]:any } | { type: "operator", value: Operator, [any]:any } | { type: "symbol", value: Symbol, [any]:any } | { type: "assign", value: Assign, [any]:any } | { type: "identifier", value: string, [any]:any }
----@alias Operator UnaryOperator | BinaryOperator
----@alias Keyword "break" | "do" | "else" | "elseif" | "end" | "for" | "function" | "goto" | "if" | "in" | "local" | "repeat" | "return" | "then" | "until" | "while" | "local"
----@alias Symbol "{" | "}" | "(" | ")" | "[" | "]" | "," | "." | ":" | "::" | ";" | "..."
----@alias Assign "="
+local Error = require("source.error")
 
 ---@class Lexer
 ---@field charStream StringStream
@@ -145,7 +140,7 @@ function Lexer:parseNumber(allowRichFormat)
 	})
 end
 
----@return Token|false|nil, Span
+---@return Token|false|nil|Error, Span
 function Lexer:parseNextToken()
 	if self.charStream:isDone() then return nil, self.charStream:here() end
 	local output, span = self.charStream:scope("token", List.flattenIfTagged({
@@ -234,9 +229,10 @@ function Lexer:parseNextToken()
 				end
 			else
 				local delim = self.charStream:next()
-				while not self.charStream:isDone() do
-					if self.charStream:nextIfEq(delim) then
-						break
+				while not self.charStream:nextIfEq(delim) do
+					if self.charStream:isDone() then
+						-- require("lib.debugger")()
+						return self.charStream:errorHere(false, "Unterminated string")
 					elseif self.charStream:nextIfEq("\\") then
 						local escapeChar = self.charStream:next()
 
@@ -374,20 +370,22 @@ end
 function Lexer:createTokenGenerator()
 	local index = 0
 	return function()
-		self.charStream:skipWhiteSpace()
-		local result, span = self:parseNextToken()
+		---@type Token | false | nil
+		local result = false
+		local span
+
 		while result == false do --Encountered a comment
 			self.charStream:skipWhiteSpace()
-			result, span = self:parseNextToken()
+			result, span = Error.try(self:parseNextToken())
+			if result == nil then return result, span end
 		end
+
 		-- print("Tokenizer: Generated " .. util.dump(result))
+
 		index = index + 1
-		if result ~= nil then
-			if result.isError then return result, span end
-			result.supertype = "token"
-			result.index = index
-			result.span = span
-		end
+
+		result.index = index
+		result.span = span
 		return result, span
 	end
 end

@@ -5,14 +5,62 @@ tableUtils = setmetatable({}, {
 	end
 })
 
----@param data table
+---@param data? table
 function tableUtils.new(data)
-	return setmetatable(data or {}, {__isObject=true})
+	return setmetatable(data or {}, {__isObject=true, __index=tableUtils})
+end
+
+---@param names string[]
+---@param outputType "{k=v}" | "{v=k}" | "{k=v,v=k}"
+---@return table
+function tableUtils.newEnum(names, outputType)
+	local keys, values = tableUtils.new(), tableUtils.new()
+
+	for i = 1,#names do
+		table.insert(keys, i)
+		table.insert(values, names[i])
+	end
+
+	local outputTable = {}
+	if outputType == "{k=v}" or outputType == "{k=v,v=k}" then
+		for i = 1,#names do
+			outputTable[keys[i]] = values[i]
+		end
+	end
+	if outputType == "{v=k}" or outputType == "{k=v,v=k}" then
+		for i = 1,#names do
+			outputTable[values[i]] = keys[i]
+		end
+	end
+
+	return setmetatable(outputTable, {
+		__isObject = outputType ~= "{k=v}",
+		__index = function(_, key)
+			local keyPresent, keyIndex = keys:hasV(key)
+			local valPresent, valIndex = values:hasV(key)
+			if keyPresent then
+				return values[keyIndex]
+			elseif valPresent then
+				return keys[valIndex]
+			end
+		end
+	})
+end
+
+function tableUtils.merge(...)
+	local output = tableUtils.new()
+	for i = 1, select("#", ...) do
+		local object = select(i, ...)
+		for k,v in pairs(object) do
+			output[k] = v
+		end
+	end
+	return output
 end
 
 function tableUtils.hasK(tbl, key)
-	for k,_ in pairs(tbl) do
-		if k == key then return true end
+	for k,v in pairs(tbl) do
+		if k == key then return true, v end
 	end
 	return false
 end

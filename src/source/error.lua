@@ -1,4 +1,5 @@
 local List = require("util.list")
+local prettyOutput = require("util.prettyOutput")
 
 ---@class Span
 local Span = require("source.span")
@@ -60,13 +61,24 @@ function Error.group(message, errors)
 	}, errorMt), span
 end
 
-function Error:stringify()
-	local output = "\x1b[7m" .. self.span:stringify(true) .. "\x1b[27m " .. self.message
+---@param color? boolean
+function Error:stringify(color)
+	if color == nil then color = true end
+	local output = ""
+
+	if color then
+		output = output .. "\x1b[7m"
+		output = output .. self.span:stringify(color)
+		output = output .. "\x1b[27m "
+	end
+
+	output = output .. (self.message or "<nil message>")
+
 	if #self.children == 1 then
-		output = output .. "\n" .. self.children[1]:stringify()
+		output = output .. "\n" .. self.children[1]:stringify(color)
 	else
 		for i,child in ipairs(self.children) do
-			output = output .. "\n\t" .. i .. ". " .. util.indent(child:stringify(), 2)
+			output = output .. "\n\t" .. i .. ". " .. prettyOutput.indent(child:stringify(color), 2)
 		end
 	end
 	return output

@@ -61,7 +61,7 @@ function Source:getCharPos2d(char)
 	end
 
 	return {
-		line = line,
+		line = line - 1,
 		character = col - 1,
 	}
 end

@@ -1,4 +1,5 @@
 local List = require("util.list")
+local format = require("util.format")
 
 ---@class Span
 local Span = {}
@@ -34,6 +35,9 @@ function Span.new(start,stop,source,unit)
 		-- print(debug.traceback("Span at 0 created",2))
 		error("Span at 0", 2)
 	end
+	-- if stop >= 12 then
+	-- 	print(debug.traceback("Created span stops at token " .. stop .. ", which is not generated yet", 2))
+	-- end
 	return setmetatable({start=start,stop=stop,source=source,unit=unit}, spanMt)
 end
 
@@ -68,7 +72,7 @@ end
 function Span:min(...)
 	if select("#",...) == 0 then error("Expected a list of spans", 2) end
 
-	return util.reduce({...}, {start=-math.huge,stop=math.huge,source=select(1,...).source}, function(value,accum)
+	return List({...}):reduce({start=-math.huge,stop=math.huge,source=select(1,...).source}, function(value,accum)
 		accum.start = math.max(accum.start, value.start)
 		accum.stop  = math.min(accum.stop,  value.stop )
 		return accum
@@ -129,19 +133,13 @@ function Span:stringify(color)
 	-- print(util.dump(self, color))
 	-- os.exit()
 
-	local name = util.formatIdentifier(self.source:displayName(), color)
+	local name = format.identifier(self.source:displayName(), color)
 
 	local rangeText = self.start .. "-" .. self.stop
 	if self.start == self.stop then rangeText = tostring(self.start) end
-	local range = util.formatLiteral(rangeText, color)
+	local range = format.literal(rangeText, color)
 
-	local preview = self:lookup()
-	if preview == "" then
-		preview = "(EOF)"
-	end
-	if preview == "\n" then
-		preview = "\\n"
-	end
+	local preview = self:lookup():gsub("\n", "\\n")
 
 	return name .. "(" .. range .. "):" .. preview
 end

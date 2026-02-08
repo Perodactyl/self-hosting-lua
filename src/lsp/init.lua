@@ -4,6 +4,10 @@ package.path = "src/?.lua;src/?/init.lua;" .. package.path
 local util = require("util")
 local lspTypes = require("types.lsp")
 local Source = require("source")
+local Parser = require("parser")
+local jsonrpc = require("lsp.jsonrpc")
+
+local semanticTokens = require("lsp.semanticTokens")
 
 local logFile = io.open("lsp-debug.log", "a")
 local log
@@ -11,8 +15,8 @@ if logFile ~= nil then
 	log = function(message)
 		logFile:write("[" .. os.date("%T") .. "] " .. message .. "\n")
 		logFile:flush()
-		io.stderr:write(message .. "\n")
-		io.stderr:flush()
+		-- io.stderr:write(message .. "\n")
+		-- io.stderr:flush()
 	end
 else
 	log = function(message)
@@ -26,9 +30,8 @@ log("Hello, World!")
 
 ---@class LSPServerOpenDocument
 ---@field doc LSPTextDocumentItem
----@field source Source
----@field tree? Chunk
 ---@field diagnostics LSPDiagnostic[]
+---@field semanticTokens integer[]
 
 ---@class LSPServer
 ---@field initialized 0 | 1 | 2
@@ -80,12 +83,23 @@ function LSPServer:handleRequest(request)
 						interFileDependencies = false,
 						workspaceDiagnostics = false,
 					},
+					semanticTokensProvider = {
+						legend = {
+							tokenTypes = semanticTokens.typeLegend,
+							tokenModifiers = semanticTokens.modifierLegend,
+						},
+						range = false,
+						full = true,
+					},
+					-- documentSymbolProvider = true,
 				}
 			}
 		})
 		self.initialized = 1
 	elseif request.method == "textDocument/diagnostic" then
 		self:publishDiagnostics(request.params.textDocument.uri, request.id)
+	elseif request.method == "textDocument/semanticTokens/full" then
+		self:publishSemanticTokens(request.params.textDocument.uri, request.id)
 	else
 		log("Responding with MethodNotFound")
 		self:sendMessage({
@@ -112,40 +126,84 @@ function LSPServer:handleNotification(notification)
 		log("Initialization complete")
 	elseif notification.method == "textDocument/didOpen" then
 		local doc = notification.params.textDocument --[[@as LSPTextDocumentItem]]
-		local source = Source.new(doc.uri, doc.text)
 
 		table.insert(self.documents, {
 			doc = doc,
-			source = source,
-			tree = nil,
-			diagnostics = util.List({
-				{
-					range = {
-						start = { line = 0, character = 0 },
-						["end"] = { line = 0, character = 4 },
-					},
-					message = "It works!",
-				},
-			}),
+			diagnostics = util.List(),
 		})
+		self:update(doc.uri)
+	elseif notification.method == "textDocument/didChange" then
+		local doc = notification.params.textDocument --[[@as LSPVersionedTextDocumentIdentifier]]
+		local target = self.documents:find(function(d) return d.doc.uri == doc.uri end)
+		if target == nil then return end
+		target.doc.version = doc.version
+		local changes = notification.params.contentChanges --[[@as List<LSPTextDocumentContentChangeEvent>]]
+
+		for _,change in ipairs(changes) do
+			target.doc.text = change.text
+		end
+
+		self:update(doc.uri)
 	end
 end
 
 ---@param message JSONObject
 function LSPServer:sendMessage(message)
 	log("Sending: " .. util.prettyOutput.dump(message))
-	message.jsonrpc = "2.0"
-	local text = util.json.stringify(message, false)
-	local headers = {["Content-Length"]=#text}
-	local resultMessage = ""
-	for k,v in pairs(headers) do
-		resultMessage = resultMessage .. k .. ": " .. tostring(v) .. "\r\n"
-	end
-	resultMessage = resultMessage .. "\r\n" .. text
+	jsonrpc.send(message)
+end
 
-	io.stdout:write(resultMessage)
-	io.stdout:write("\r\n")
-	io.stdout:flush()
+function LSPServer:update(uri)
+	local doc = self.documents:find(function(d) return d.doc.uri == uri end)
+	if doc == nil then return end
+	log("Updating " .. doc.doc.uri)
+
+	local diagnostics = util.List()
+
+	local source = Source.new(doc.doc.uri, doc.doc.text)
+	local result = Parser.new(source):parseChunk()
+	if result.isError then
+		diagnostics:push({
+			message = result:stringify(false),
+			range = result.span:toRange()
+		})
+	end
+
+	doc.diagnostics = diagnostics
+
+	local tokens = util.List()
+
+	local lastLine, lastStartChar = 0, 0
+	for _,token in ipairs(source.sourceTokens.buffer) do
+		local span, type = token.span, token.type
+		local range = span:toRange()
+
+		local semanticTokenType = type --[[@as string]]
+		if type == "nilLiteral" then semanticTokenType = "constant" end
+		if type == "boolLiteral" then semanticTokenType = "constant" end
+		if type == "string" then semanticTokenType = "string" end
+		if type == "number" then semanticTokenType = "number" end
+		if type == "keyword" then semanticTokenType = "keyword" end
+		if type == "operator" then semanticTokenType = "operator" end
+		if type == "symbol" then semanticTokenType = "operator" end
+		if type == "assign" then semanticTokenType = "operator" end
+		if type == "identifier" then semanticTokenType = "variable" end
+
+		local line, startChar = range.start.line, range.start.character
+		log("Line: " .. line .. " startChar: " .. startChar)
+		local deltaLine, deltaStartChar = line - lastLine, startChar - lastStartChar
+		if deltaLine > 0 then deltaStartChar = startChar end
+		lastLine, lastStartChar = line, startChar
+		local length = span.stop - span.start + 1
+
+		local tokenType = (semanticTokens.typeLegend[semanticTokenType] or 0) - 1
+		local tokenModifiers = 0
+
+		tokens:push(deltaLine, deltaStartChar, length, tokenType, tokenModifiers)
+		-- break
+	end
+
+	doc.semanticTokens = tokens
 end
 
 function LSPServer:publishDiagnostics(uri, requestID)
@@ -161,56 +219,24 @@ function LSPServer:publishDiagnostics(uri, requestID)
 	})
 end
 
+function LSPServer:publishSemanticTokens(uri, requestID)
+	local doc = self.documents:find(function(d) return d.doc.uri == uri end)
+	if doc == nil then return end
+	self:sendMessage({
+		id = requestID,
+		-- method = not requestID and "textDocument/publishDiagnostics" or nil,
+		result = {
+			data = doc.semanticTokens
+		}
+	})
+end
+
 local function launch()
 	local server = LSPServer.new()
 
-	local headerPart = ""
 	while true do
-		local char = io.stdin:read("L")
-		headerPart = headerPart .. char
-		-- log(util.prettyOutput.dump(block))
-
-		local headerEnd = headerPart:find("\r\n\r\n")
-		if headerEnd ~= nil then
-			local headers = {}
-			local i = 1
-			while true do
-				local lineEnd,nextLine = headerPart:find("\r?\n", i)
-				local line = headerPart:sub(i, lineEnd)
-				i = nextLine + 1
-				-- print(util.formatString(line, true, false, "lua5.2"))
-				if line == "" or line == "\r" then
-					break
-				end
-				local left, right = line:match("([-a-zA-Z]+): *([-0-9a-zA-Z]+)")
-				if left == nil then
-					error("Not a header: " .. util.format.string(line, true, false, "lua5.2"))
-				else
-					headers[left] = right
-				end
-			end
-
-			if headers["Content-Length"] == nil then
-				error("JsonRPC message missing Content-Length header", 2)
-			end
-
-			local data = io.stdin:read(tonumber(headers["Content-Length"]))
-			local result = util.json.parse(data)
-
-			if util.json.type(result) ~= "object" then
-				error("Message must be an object")
-			end
-			---@cast result JSONObject
-			if result.jsonrpc ~= "2.0" then
-				error("Message is not valid JsonRPC: jsonrpc = " .. util.json.stringify(result.jsonrpc, true))
-			end
-
-			-- log("Streamed in: " .. util.prettyOutput.dump(result,true))
-			server:handleMessage(result)
-			headerPart = ""
-		else
-			-- log(util.prettyOutput.dump(headerPart))
-		end
+		local message = jsonrpc.receive()
+		server:handleMessage(message)
 	end
 end
 

@@ -7,6 +7,7 @@ format.defaultTruncationIndicator = "\x1b[40m...\x1b[49m"
 ---@param allowTruncation boolean
 ---@param escapeFormat? "lua5.1" | "lua5.2" | "json"
 function format.string(input, color, allowTruncation, escapeFormat)
+	input = tostring(input)
 	local fullLength = #input
 	local wasTruncated = false
 	if allowTruncation then

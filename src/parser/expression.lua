@@ -136,7 +136,7 @@ local function generatePrecedenceFunc(children, operators)
 			if operator.type ~= "operator" then return self.tokenStream:errorHere(true, "Not an operator") end
 
 			local right, rightSpan = children(self)
-			if right.isError then return right:extend("While parsing binary " .. operator) end
+			if right.isError then return right:extend("While parsing binary " .. operator.value) end
 
 			expr = {
 				type = "binary",

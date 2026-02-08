@@ -16,20 +16,20 @@
 ---@class LSPRequestMessage: LSPMessage
 ---@field id LSPInteger | string
 ---@field method string
----@field params? LSPObject | LSPArray
+---@field params LSPObject | LSPArray | nil
 
 ---Must be sent for any LSPRequestMessage; result can be null.
 ---@class LSPResponseMessage: LSPMessage
 ---Corresponds to the request ID.
 ---@field id LSPInteger | string | LSPNull
 ---MUST exist on success. MUST NOT exist on error.
----@field result? LSPAny
----@field error? LSPResponseError
+---@field result LSPAny | nil
+---@field error LSPResponseError | nil
 
 ---@class LSPResponseError
 ---@field code integer | LSPResponseCode
 ---@field message string
----@field data? LSPAny
+---@field data LSPAny | nil
 
 ---@enum LSPResponseCode
 local ResponseCode = {
@@ -54,7 +54,7 @@ local ResponseCode = {
 
 ---@class LSPNotificationMessage: LSPMessage
 ---@field method string
----@field params? LSPArray | LSPObject
+---@field params LSPArray | LSPObject | nil
 
 ---@class LSPCancelNotification: LSPNotificationMessage
 ---@field method "$/cancelRequest"
@@ -89,10 +89,10 @@ local ResponseCode = {
 ---@class LSPTextDocumentIdentifier
 ---@field uri LSPDocumentUri
 
----@class LSPVersionedTextDocumentIdentifier
+---@class LSPVersionedTextDocumentIdentifier: LSPTextDocumentIdentifier
 ---@field version LSPInteger increases after each change
 
----@class LSPOptionalVersionedTextDocumentIdentifier
+---@class LSPOptionalVersionedTextDocumentIdentifier: LSPTextDocumentIdentifier
 ---@field version LSPInteger | LSPNull
 
 ---@class LSPTextDocumentPositionParams
@@ -100,9 +100,9 @@ local ResponseCode = {
 ---@field position LSPPosition
 
 ---@class LSPDocumentFilter
----@field language? string
----@field scheme? string | "file" | "untitled"
----@field pattern? string glob pattern
+---@field language string | nil
+---@field scheme string | "file" | "untitled" | nil
+---@field pattern string glob pattern | nil
 
 ---@alias LSPDocumentSelector LSPDocumentFilter[]
 
@@ -116,14 +116,16 @@ local ResponseCode = {
 
 ---@class LSPDiagnostic
 ---@field range LSPRange
----@field severity? LSPDiagnosticSeverity
----@field code? LSPInteger | string
----@field codeDescription? string
----@field source? string
+---@field severity LSPDiagnosticSeverity | nil
+---@field code LSPInteger | string | nil
+---@field codeDescription string | nil
+---@field source string | nil
 ---@field message string
----@field tags? LSPDiagnosticTag[]
----@field relatedInformation? LSPDiagnosticRelatedInformation[]
----@field data? LSPAny preserved between textDocument/publishDiagnostics and textDocument/codeAction
+---@field tags LSPDiagnosticTag[] | nil
+---@field relatedInformation LSPDiagnosticRelatedInformation[] | nil
+---@field data LSPAny | nil preserved between textDocument/publishDiagnostics and textDocument/codeAction
+
+---@alias LSPTextDocumentContentChangeEvent { range: LSPRange, text: string } | { text: string }
 
 ---@enum LSPDiagnosticSeverity
 local DiagnosticSeverity = {

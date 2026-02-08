@@ -127,7 +127,7 @@ end
 ---@param ... T
 function List:push(...)
 	for i = 1, select("#", ...) do
-		table.insert(self, select(i, ...))
+		table.insert(self, (select(i, ...)))
 	end
 end
 

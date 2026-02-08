@@ -160,6 +160,9 @@ end
 ---@param recoverable boolean
 ---@param message? string
 function LazyStream:expect(value,recoverable,message)
+	if self:isDone() then
+		error((self:errorHere(recoverable, message or ("Expected " .. prettyOutput.dump(value, false) .. ", got EOF"))))
+	end
 	if not self:eq(value) then
 		error((self:errorNext(recoverable, message or ("Expected " .. prettyOutput.dump(value, false)))))
 	end
