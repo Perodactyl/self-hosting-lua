@@ -26,7 +26,7 @@ local function runTest(name, test, showSuccess, alwaysPrintTestName)
 
 	local uncrashed, result = xpcall(parser[test.parser], debug.traceback, parser)
 
-	local success = uncrashed and result ~= nil and not result.isError and (test.result == nil or util.deepEq(test.result, result))
+	local success = uncrashed and result ~= nil and not result.isError and (test.result == nil or util.tableUtils.deepEq(test.result, result))
 
 	if not success then
 

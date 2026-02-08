@@ -1,6 +1,7 @@
-local util = require("util")
 local Span = require("source.span")
 local Error = require("source.error")
+local tableUtils = require("util.table")
+local prettyOutput = require("util.prettyOutput")
 
 ---Temporary fix because LuaLS doesn't understand that class generics should be visible in fields.
 ---@alias T Token
@@ -55,6 +56,34 @@ function StringStream:peek()
 	end
 end
 
+function StringStream:readN(n)
+	local out = ""
+	if n == nil then error("n was nil", 2) end
+	for _ = 1,n do
+		out = out .. (self:next() or "")
+	end
+	return out
+end
+
+---@param value string
+---@param recoverable boolean
+---@param message? string
+function StringStream:expectStr(value,recoverable,message)
+	self:save()
+	if self:readN(#value) == value then
+		self:continue()
+		return true
+	else
+		self:recall()
+		error((self:errorNext(recoverable, message or ("Expected '" .. value .. "'"))))
+	end
+end
+
+function StringStream:skipWhiteSpace()
+	while string.match(self:peek() or "", "%s") do self:next() end
+end
+
+
 ---@param input string
 ---@param source Source
 ---@return StringStream
@@ -108,11 +137,11 @@ function LazyStream:get(index, allowPopulating)
 end
 
 function LazyStream:eq(value, ...)
-	if util.deepEq(self:peek(), value, "b") then
+	if tableUtils.deepEq(self:peek(), value, "b") then
 		return true
 	end
 	for i = 1, select("#",...) do
-		if util.deepEq(self:peek(), select(i,...), "b") then
+		if tableUtils.deepEq(self:peek(), select(i,...), "b") then
 			return true
 		end
 	end
@@ -132,7 +161,7 @@ end
 ---@param message? string
 function LazyStream:expect(value,recoverable,message)
 	if not self:eq(value) then
-		error((self:errorNext(recoverable, message or ("Expected " .. util.dump(value, false)))))
+		error((self:errorNext(recoverable, message or ("Expected " .. prettyOutput.dump(value, false)))))
 	end
 	return self:next()
 end

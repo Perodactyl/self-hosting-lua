@@ -1,4 +1,4 @@
-local util = require("util")
+local List = require("util.list")
 
 ---@class Span
 local Span = {}
@@ -19,12 +19,8 @@ local spanMt = {
 	__add=function(a,b) return a:join(b) end,
 	__concat=function(a,b) return a:join(b) end,
 	__bor=function(a,b) return a:join(b) end,
-	__shl=function(self, dist)
-		return Span.new(self.start - dist, self.stop - dist, self.source, self.unit)
-	end,
-	__shr=function(self, dist)
-		return Span.new(self.start + dist, self.stop + dist, self.source, self.unit)
-	end,
+	__shl=function(self, dist) return self:shl(dist) end,
+	__shr=function(self, dist) return self:shr(dist) end,
 	__band=function(a, b) return a:min(b) end,
 }
 
@@ -60,6 +56,13 @@ function Span:join(other)
 	)
 end
 
+function Span:shl(dist)
+	return Span.new(self.start - dist, self.stop - dist, self.source, self.unit)
+end
+function Span:shr(dist)
+	return Span.new(self.start + dist, self.stop + dist, self.source, self.unit)
+end
+
 ---@param ... Span
 ---@return Span
 function Span:min(...)
@@ -76,7 +79,7 @@ end
 ---@return Span
 function Span:max(...)
 	if select("#",...) == 0 then error("Expected a list of spans", 2) end
-	return util.reduce({...}, select(1,...), function(value,accum)
+	return List({...}):reduce(select(1,...), function(value,accum)
 		return value:join(accum)
 	end)
 end
@@ -133,8 +136,26 @@ function Span:stringify(color)
 	local range = util.formatLiteral(rangeText, color)
 
 	local preview = self:lookup()
+	if preview == "" then
+		preview = "(EOF)"
+	end
+	if preview == "\n" then
+		preview = "\\n"
+	end
 
 	return name .. "(" .. range .. "):" .. preview
+end
+
+---@return LSPRange
+function Span:toRange()
+	if self.unit == "token" then
+		self = self:cast()
+	end
+
+	return {
+		start = self.source:getCharPos2d(self.start),
+		["end"] = self.source:getCharPos2d(self.stop),
+	}
 end
 
 return Span

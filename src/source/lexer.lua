@@ -1,4 +1,5 @@
-local util = require("util")
+local tableUtils = require("util.table")
+local List = require("util.list")
 local LazyStream = require("lazyStream")
 
 ---@alias Token { type: "string", value: string, [any]:any } | { type: "number", value: number, [any]:any } | { type: "keyword", value: Keyword, [any]:any } | { type: "operator", value: Operator, [any]:any } | { type: "symbol", value: Symbol, [any]:any } | { type: "assign", value: Assign, [any]:any } | { type: "identifier", value: string, [any]:any }
@@ -20,29 +21,20 @@ function Lexer.new(source)
 	})
 end
 
-local function readN(charStream, n)
-	local out = ""
-	if n == nil then error("readN: n was nil", 2) end
-	for _ = 1,n do
-		out = out .. (charStream:next() or "")
-	end
-	return out
-end
-
----@param charStream LazyStream
+---@param charStream StringStream
 local function parsePaths(charStream, paths)
 	local output = {__flattenable = true}
 	table.sort(paths, function(a,b) return #a.match > #b.match end)
 	for _,path in ipairs(paths) do
 		table.insert(output, {path.match, function()
-			if path.match == readN(charStream, #path.match) then
+			if path.match == charStream:readN(#path.match) then
 				if path.word then
 					local ch = charStream:peek()
 					if ch ~= nil and ch:match("[a-zA-Z0-9_]") then
 						return charStream:errorHere(true, "Not on word boundary")
 					end
 				end
-				local result = util.deepCopy(path.result)
+				local result = tableUtils.deepCopy(path.result)
 				if path.autoSet ~= nil then result[path.autoSet] = path.match end
 				return result
 			end
@@ -52,10 +44,6 @@ local function parsePaths(charStream, paths)
 	return output
 end
 
-local function whiteSpace(charStream)
-	while string.match(charStream:peek() or "", "%s") do charStream:next() end
-end
-
 ---@param allowRichFormat boolean Enables hex literals, scientific notation, and floats
 ---@return Token | Error, Span
 function Lexer:parseNumber(allowRichFormat)
@@ -63,7 +51,7 @@ function Lexer:parseNumber(allowRichFormat)
 		{"Hexadecimal Number Literal", function()
 			if not allowRichFormat then return self.charStream:errorHere(true, "Not a rich number") end
 
-			if not readN(self.charStream, 2):match("0[xX]") then
+			if not self.charStream:readN(2):match("0[xX]") then
 				return self.charStream:errorHere(true, "Not beginning with 0x or 0X")
 			end
 
@@ -160,7 +148,7 @@ end
 ---@return Token|false|nil, Span
 function Lexer:parseNextToken()
 	if self.charStream:isDone() then return nil, self.charStream:here() end
-	local output, span = self.charStream:scope("token", util.flattenIfTagged({
+	local output, span = self.charStream:scope("token", List.flattenIfTagged({
 		{"Long Comment", function()
 			self.charStream:expect("-", true)
 			self.charStream:expect("-", true)
@@ -176,7 +164,7 @@ function Lexer:parseNextToken()
 			while not self.charStream:isDone() do
 				if self.charStream:nextIfEq("]") then
 					self.charStream:save()
-					if readN(self.charStream, level + 1) == ("="):rep(level) .. "]" then
+					if self.charStream:readN(level + 1) == ("="):rep(level) .. "]" then
 						self.charStream:continue()
 						break
 					else
@@ -227,7 +215,7 @@ function Lexer:parseNextToken()
 				while not self.charStream:isDone() do
 					if self.charStream:nextIfEq("]") then
 						self.charStream:save()
-						if readN(self.charStream, level + 1) == ("="):rep(level) .. "]" then
+						if self.charStream:readN(level + 1) == ("="):rep(level) .. "]" then
 							self.charStream:continue()
 							break
 						else
@@ -275,7 +263,7 @@ function Lexer:parseNextToken()
 							end
 							stringContents = stringContents .. string.char(tonumber(parts,10))
 						elseif escapeChar == "x" then
-							local hex = readN(self.charStream, 2)
+							local hex = self.charStream:readN(2)
 							stringContents = stringContents .. string.char(tonumber(hex,16))
 						elseif escapeChar == "u" then
 							if not self.charStream:nextIfEq("{") then error("Escape missing {") end
@@ -289,7 +277,7 @@ function Lexer:parseNextToken()
 							end
 							stringContents = stringContents .. utf8.char(tonumber(numParts, 16))
 						elseif escapeChar == "z" then
-							whiteSpace(self.charStream)
+							self.charStream:skipWhiteSpace()
 						else
 							return self.charStream:errorHere(false, "Invalid escape: \\" .. escapeChar)
 						end
@@ -303,7 +291,7 @@ function Lexer:parseNextToken()
 		{"Number", function()
 			return self:parseNumber(true)
 		end},
-		parsePaths(self.charStream --[[@as LazyStream]], {
+		parsePaths(self.charStream, {
 			{ match = "{",  result = { type = "symbol" }, autoSet = "value" },
 			{ match = "}",  result = { type = "symbol" }, autoSet = "value" },
 			{ match = "[",  result = { type = "symbol" }, autoSet = "value" },
@@ -386,10 +374,10 @@ end
 function Lexer:createTokenGenerator()
 	local index = 0
 	return function()
-		whiteSpace(self.charStream)
+		self.charStream:skipWhiteSpace()
 		local result, span = self:parseNextToken()
 		while result == false do --Encountered a comment
-			whiteSpace(self.charStream)
+			self.charStream:skipWhiteSpace()
 			result, span = self:parseNextToken()
 		end
 		-- print("Tokenizer: Generated " .. util.dump(result))

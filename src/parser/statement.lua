@@ -1,5 +1,5 @@
-local util = require("util")
-local try = util.try
+local Error = require("source.error")
+local try = Error.try
 
 ---@param parser Parser
 return function(parser)

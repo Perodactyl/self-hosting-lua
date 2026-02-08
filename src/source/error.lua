@@ -1,4 +1,5 @@
-local util = require("util")
+local List = require("util.list")
+
 ---@class Span
 local Span = require("source.span")
 
@@ -45,13 +46,14 @@ function Error:unrecoverable()
 end
 
 ---@param message string
----@param errors Error[]
+---@param errors List<Error> | Error[]
 ---@return Error, Span
 function Error.group(message, errors)
+	errors = List(errors)
 	if #errors == 0 then error("Expected a list of errors", 2) end
-	local span = Span:max(table.unpack(util.map(errors, function(e) return e.span end)))
+	local span = Span:max(table.unpack(errors:map(function(e) return e.span end)))
 	return setmetatable({
-		recoverable = util.reduce(errors,true,function(e,a) return a and e.recoverable end),
+		recoverable = errors:reduce(true,function(e,a) return a and e.recoverable end),
 		message = message,
 		children = errors,
 		span = span
@@ -68,6 +70,17 @@ function Error:stringify()
 		end
 	end
 	return output
+end
+
+---@generic T
+---@param value T|Error
+---@return T
+---@overload fun(value: T|Error, span: Span): T, Span
+function Error.try(value, span)
+	if type(value) == "table" and value.isError then
+		error(value)
+	end
+	return value, span
 end
 
 return Error

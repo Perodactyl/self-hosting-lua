@@ -1,6 +1,6 @@
 # Self-Hosting Lua Parser
 
-A lua parser written in lua. My goal is to make it parse something more fancy than lua and convert it.
+A lua parser written in lua. My goal is to make it parse something more fancy than lua and convert it. Currently, the LSP segfaults for an unknown reason when not using luaJIT.
 
 ### Usage
 ```sh

@@ -13,26 +13,26 @@ return function(parts, color)
 
 			local str, needsSpace = "", false
 			if token.type == "keyword" then
-				str = util.formatKeyword(token.value, color)
+				str = util.format.keyword(token.value, color)
 				needsSpace = true
 			elseif token.type == "identifier" then
-				str = util.formatIdentifier(token.value, color)
+				str = util.format.identifier(token.value, color)
 				needsSpace = true
 			elseif token.type == "assign" then
 				str = token.value
 			elseif token.type == "symbol" then
 				str = token.value
 			elseif token.type == "nil" then
-				str = util.formatLiteral("nil", color)
+				str = util.format.literal("nil", color)
 				needsSpace = true
 			elseif token.type == "bool" then
-				str = util.formatLiteral(token.value, color)
+				str = util.format.literal(token.value, color)
 				needsSpace = true
 			elseif token.type == "number" then
-				str = util.formatLiteral(token.value, color)
+				str = util.format.literal(token.value, color)
 				needsSpace = true
 			elseif token.type == "string" then
-				str = util.formatString(token.value, color, false, "lua5.1")
+				str = util.format.string(token.value, color, false, "lua5.1")
 			end
 
 			if needsSpace and output:sub(-1,-1):match("[a-zA-Z0-9]") and #output > 0 then

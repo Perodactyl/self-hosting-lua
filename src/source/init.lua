@@ -46,4 +46,24 @@ function Source:lookup(start, stop)
 	return self.sourceText:sub(start, stop)
 end
 
+---@return LSPPosition
+function Source:getCharPos2d(char)
+	local line = 1
+	local col = 1
+	for i,ch in utf8.codes(self.sourceText) do
+		if i == char then break end
+		if ch == string.byte("\n") then
+			line = line + 1
+			col = 1
+		else
+			col = col + 1
+		end
+	end
+
+	return {
+		line = line,
+		character = col - 1,
+	}
+end
+
 return Source

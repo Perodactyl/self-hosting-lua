@@ -1,5 +1,3 @@
-local LazyStream = require("lazyStream")
-
 ---@class Parser
 ---@field tokenStream LazyStream<Token>
 local Parser = {}
@@ -175,7 +173,7 @@ function Parser:parseFunctionDefinition()
 		parameters = parameters,
 		rest = false,
 		body = body,
-	}, span + (bodySpan >> 1)
+	}, span + (bodySpan:shr(1))
 end
 
 return Parser
