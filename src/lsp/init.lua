@@ -64,8 +64,6 @@ _G.log = loggerFor("globalScope")
 local log = loggerFor("main")
 
 local function loadModule(name)
-	local shortname = name
-
 	local logger = loggerFor(name)
 
 	local exe, loadError = loadfile("src/lsp/modules/" .. name .. ".lua", "t", setmetatable({
@@ -126,6 +124,16 @@ end
 
 function LSPServerOpenDocument:stringify()
 	return "\x1b[95;3m" .. self:name() .. "\x1b[39;23m"
+end
+
+---@param position LSPPosition
+---@return integer
+function LSPServerOpenDocument:lookupCharPos(position)
+	local pattern = "^" .. (".-?\n"):rep(position.line) .. ("."):rep(position.character) .. "(.)"
+	local _, matchEnd = self.currentText:find(pattern)
+	log(tostring(matchEnd), "info")
+	if matchEnd == nil then return #self.currentText end
+	return matchEnd
 end
 
 ---@class LSPServer
@@ -216,7 +224,10 @@ function LSPServer:handleRequest(request)
 				capabilities = util.tableUtils.merge(
 					{
 						positionEncoding = "utf-8",
-						textDocumentSync = 1,
+						textDocumentSync = {
+							openClose = true,
+							change = 1, -- not working right yet
+						},
 					},
 					table.unpack(self.modules:getEach("capabilities"))
 				),
@@ -290,8 +301,19 @@ function LSPServer:handleNotification(notification)
 		local changes = notification.params.contentChanges --[[@as List<LSPTextDocumentContentChangeEvent>]]
 
 		for _,change in ipairs(changes) do
-			target.currentText = change.text
+			if change.range == nil then
+				target.currentText = change.text
+			else
+				local startChar = target:lookupCharPos(change.range.start)
+				local endChar = target:lookupCharPos(change.range["end"])
+				local beforeContent = target.currentText:sub(1,startChar-1)
+				local afterContent = target.currentText:sub(endChar)
+				log("\x1b[31m" .. beforeContent .. "\x1b[33m" .. change.text .. "\x1b[31m" .. afterContent .. "\x1b[39m")
+				target.currentText = beforeContent .. change.text .. afterContent
+			end
 		end
+
+		log("Text:\n" .. target.currentText, "normal")
 
 		self:update(doc.uri)
 		return
