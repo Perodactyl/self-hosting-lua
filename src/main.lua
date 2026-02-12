@@ -23,7 +23,7 @@ end
 local function stripSources(value, state)
 	if state == nil then state = {} end
 	if type(value) == "table" then
-		for k,v in pairs(value) do
+		for _,v in pairs(value) do
 			if type(v) == "table" and not util.tableUtils.hasV(state, v) then
 				table.insert(state, v)
 				if v.supertype == "token" then
@@ -34,6 +34,15 @@ local function stripSources(value, state)
 			end
 		end
 	end
+end
+
+local function compareResults(got, expected)
+	if expected == nil then return true end
+	got = util.tableUtils.deepCopy(got)
+	expected = util.tableUtils.deepCopy(expected)
+	stripSources(got)
+	stripSources(expected)
+	return util.tableUtils.deepEq(got, expected, "a")
 end
 
 local function runTest(name, test, showSuccess, alwaysPrintTestName)
@@ -50,7 +59,7 @@ local function runTest(name, test, showSuccess, alwaysPrintTestName)
 
 	local uncrashed, result = xpcall(parser[test.parser], debug.traceback, parser)
 
-	local success = uncrashed and result ~= nil and not result.isError and (test.result == nil or util.tableUtils.deepEq(test.result, result,"b"))
+	local success = uncrashed and result ~= nil and not result.isError and compareResults(result, test.result)
 
 	if not success then
 

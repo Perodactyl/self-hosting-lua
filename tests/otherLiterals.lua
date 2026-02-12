@@ -5,49 +5,49 @@ return {
 			name = "Nil Literal",
 			source = [[nil]],
 			parser = "parseExpression",
-			result = {type="nil"}
+			autotest = true,
 		},
 		{
 			name = "Bool Literal",
 			source = [[true]],
 			parser = "parseExpression",
-			result = {type="bool",value=true}
+			autotest = true,
 		},
 		{
 			name = "Integer Literal",
 			source = [[321]],
 			parser = "parseExpression",
-			result = {type="number",value=321}
+			autotest = true,
 		},
 		{
 			name = "Float Literal",
 			source = [[3.14]],
 			parser = "parseExpression",
-			result = {type="number",value=3.14}
+			autotest = true,
 		},
 		{
 			name = "Decimal Scientific Notation",
 			source = [[1e-3]],
 			parser = "parseExpression",
-			result = {type="number",value=0.001}
+			autotest = true,
 		},
 		{
 			name = "Hexadecimal Integer Literal",
 			source = [[0xff]],
 			parser = "parseExpression",
-			result = {type="number",value=255}
+			autotest = true,
 		},
 		{
 			name = "Hexadecimal Float Literal",
 			source = [[0xff.a]],
 			parser = "parseExpression",
-			result = {type="number",value=255.625}
+			autotest = true,
 		},
 		{
 			name = "Hexadecimal Scientific Notation",
 			source = [[0x1p9]],
 			parser = "parseExpression",
-			result = {type="number",value=512}
+			autotest = true,
 		},
 		{
 			name = "Vararg",
@@ -63,13 +63,13 @@ return {
 			name = "Line Comment",
 			source = "-- This is a comment\nnil",
 			parser = "parseExpression",
-			result = {type="nil"},
+			autotest = true,
 		},
 		{
 			name = "Block Comment",
 			source = "--[=[This is a comment\n]=] nil",
 			parser = "parseExpression",
-			result = {type="nil"},
+			autotest = true,
 		},
 	},
 }

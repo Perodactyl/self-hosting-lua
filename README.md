@@ -1,6 +1,6 @@
 # Self-Hosting Lua Parser
 
-A lua parser written in lua. My goal is to make it parse something more fancy than lua and convert it. Currently, the LSP segfaults for an unknown reason when not using luaJIT.
+A lua parser written in lua. My goal is to make it parse something more fancy than lua and convert it. Currently working on LSP support instead tho.
 
 ### Usage
 ```sh
@@ -23,7 +23,7 @@ lua src/main.lua "1."
 lua src/main.lua "1.1"
 ```
 
-Most tests generate long, complicated syntax trees for output. Instead of storing these in the test files themselves, I made it so that they go in `autotest-maps.lua`. If a test has `autotest = true` but `autotest-maps.lua` lacks an entry for it, it will only fail of parsing fails (it will pass even if it generated something weird and bad). Use these commands to manipulate autotests:
+Most tests generate long, complicated syntax trees for output. Instead of storing these in the test files themselves, I made it so that they go in `autotest-maps.lua`. If a test has `autotest = true` but `autotest-maps.lua` lacks an entry for it, it will only fail if parsing fails (it will pass even if it generated something weird and bad). Use these commands to manipulate autotests:
 
 ```sh
 # Rebuild autotest maps completely. Does nothing if any test is failing.
@@ -53,3 +53,22 @@ SAVE_CODE=/tmp/code.lua lua src/main.lua "custom" path/to/file.lua
 
 # (of course you can use both variables at once to write the AST and the generated code)
 ```
+
+### LSP Server
+Of the many things I'm working on with this project, I'm trying to write a Language Server.
+
+Feature progress checklist:
+- [ ] Diagnostics
+	- [x] Show an error
+	- [ ] Put it in the right spot, with the right message
+	- [ ] Recover and find other errors / continue parsing
+- [ ] Semantic Tokens (syntax highlight)
+	- [x] Token-based
+	- [ ] Tree-based (still some issues with functions and several types of tree branch don't fully specify their tokens)
+- [ ] Stability
+
+To test, enter the lspTesting directory and run:
+```sh
+./start-nvim.sh
+```
+Feel free to contribute more stuff for other code editors.

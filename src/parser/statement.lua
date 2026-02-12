@@ -85,13 +85,17 @@ function Parser:parseStatement()
 				end},
 			})
 
-			if right ~= -1 and right.isError then return right, span end
+			if right == -1 then
+				right = nil
+			elseif right.isError then
+				return right, span
+			end
 
 			return {
 				type="assignment",
 				localToken=localKw,
 				variables=variables,
-				right = right == -1 and nil or right,
+				right = right,
 			}
 		end},
 

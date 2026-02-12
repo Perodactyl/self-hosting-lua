@@ -130,12 +130,17 @@ end
 
 ---@generic T
 ---@param value T
+---@param state? any[]
 ---@return T
-function tableUtils.deepCopy(value)
-	if type(value) == "table" then
+function tableUtils.deepCopy(value, state)
+	if state == nil then state = {} end
+	if state[value] ~= nil then
+		return state[value]
+	elseif type(value) == "table" then
 		local output = {}
+		state[value] = output
 		for k,v in pairs(value) do
-			output[tableUtils.deepCopy(k)] = tableUtils.deepCopy(v)
+			output[tableUtils.deepCopy(k, state)] = tableUtils.deepCopy(v, state)
 		end
 		return output
 	else

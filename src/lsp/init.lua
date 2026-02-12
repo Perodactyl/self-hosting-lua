@@ -129,11 +129,9 @@ end
 ---@param position LSPPosition
 ---@return integer
 function LSPServerOpenDocument:lookupCharPos(position)
-	local pattern = "^" .. (".-?\n"):rep(position.line) .. ("."):rep(position.character) .. "(.)"
+	local pattern = "^" .. (".-\n"):rep(position.line) .. ("."):rep(position.character)
 	local _, matchEnd = self.currentText:find(pattern)
-	log(tostring(matchEnd), "info")
-	if matchEnd == nil then return #self.currentText end
-	return matchEnd
+	return matchEnd + 1
 end
 
 ---@class LSPServer
@@ -226,7 +224,7 @@ function LSPServer:handleRequest(request)
 						positionEncoding = "utf-8",
 						textDocumentSync = {
 							openClose = true,
-							change = 1, -- not working right yet
+							change = 2,
 						},
 					},
 					table.unpack(self.modules:getEach("capabilities"))
@@ -308,12 +306,16 @@ function LSPServer:handleNotification(notification)
 				local endChar = target:lookupCharPos(change.range["end"])
 				local beforeContent = target.currentText:sub(1,startChar-1)
 				local afterContent = target.currentText:sub(endChar)
-				log("\x1b[31m" .. beforeContent .. "\x1b[33m" .. change.text .. "\x1b[31m" .. afterContent .. "\x1b[39m")
+				--[[ log(
+					util.format.string(beforeContent, true, false, "lua5.2") .. " " ..
+					util.format.string(change.text, true, false, "lua5.2") .. " " ..
+					util.format.string(afterContent, true, false, "lua5.2")
+				) ]]
 				target.currentText = beforeContent .. change.text .. afterContent
 			end
 		end
 
-		log("Text:\n" .. target.currentText, "normal")
+		-- log("Text:\n" .. target.currentText, "normal")
 
 		self:update(doc.uri)
 		return
