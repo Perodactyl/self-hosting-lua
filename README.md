@@ -2,6 +2,9 @@
 
 A lua parser written in lua. My goal is to make it parse something more fancy than lua and convert it. Currently working on LSP support instead tho.
 
+## Notice
+This project has moved to my friend's gitea because I *don't appreciate* what microslop is doing with this website. See [this link](https://gitea.chatapp.one/perodactyl/lua-lua) or [this one](https://gitea.luathenerd.dev/perodactyl/lua-lua) if the first link doesn't work.
+
 ### Usage
 ```sh
 # Run all tests and listen for changes (requires watchexec to be installed)
