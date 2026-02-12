@@ -23,6 +23,9 @@ local spanMt = {
 	__shl=function(self, dist) return self:shl(dist) end,
 	__shr=function(self, dist) return self:shr(dist) end,
 	__band=function(a, b) return a:min(b) end,
+	__lt=function(a, b)
+		return a.start < b.start
+	end
 }
 
 ---@param start integer
@@ -107,7 +110,7 @@ function Span:cast()
 		stopRef  = stop.span
 	else
 		-- error("Span stops at token " .. self.stop .. ", which is not generated yet", 2)
-		print(debug.traceback("Span stops at token " .. self.stop .. ", which is not generated yet", 2))
+		-- print(debug.traceback("Span stops at token " .. self.stop .. ", which is not generated yet", 2))
 		return Span.point(1, self.source, "char")
 	end
 
@@ -139,7 +142,7 @@ function Span:stringify(color)
 	if self.start == self.stop then rangeText = tostring(self.start) end
 	local range = format.literal(rangeText, color)
 
-	local preview = self:lookup():gsub("\n", "\\n")
+	local preview = self:lookup():gsub("\n", "\\n"):gsub("\r", "\\r")
 
 	return name .. "(" .. range .. "):" .. preview
 end

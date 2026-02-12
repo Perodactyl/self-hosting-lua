@@ -5,12 +5,13 @@ local Error = require("source.error")
 
 ---@class Lexer
 ---@field charStream StringStream
+---@field comments Span
 local Lexer = {}
 
 ---@param source Source
 ---@return Lexer
 function Lexer.new(source)
-	local lexer = { charStream = LazyStream.fromString(source.sourceText, source) }
+	local lexer = { charStream = LazyStream.fromString(source.sourceText, source), comments = {} }
 	return setmetatable(lexer, {
 		__index = Lexer
 	})
@@ -326,9 +327,9 @@ function Lexer:parseNextToken()
 			{ match = "and", result = { type = "operator" }, autoSet = "value", word=true },
 			{ match = "or",  result = { type = "operator" }, autoSet = "value", word=true },
 
-			{ match = "false", result = { type = "boolLiteral", value = false }, word=true },
-			{ match = "true",  result = { type = "boolLiteral", value = true }, word=true },
-			{ match = "nil",   result = { type = "nilLiteral" }, word=true },
+			{ match = "false", result = { type = "boolean", value = false }, word=true },
+			{ match = "true",  result = { type = "boolean", value = true }, word=true },
+			{ match = "nil",   result = { type = "nil" }, word=true },
 
 			{ match = "break",    result = { type = "keyword" }, autoSet = "value", word=true },
 			{ match = "do",       result = { type = "keyword" }, autoSet = "value", word=true },
@@ -371,14 +372,18 @@ function Lexer:createTokenGenerator()
 	local index = 0
 	return function()
 		---@type Token | false | nil
-		local result = false
+		local result
 		local span
 
-		while result == false do --Encountered a comment
+		repeat
 			self.charStream:skipWhiteSpace()
 			result, span = Error.try(self:parseNextToken())
 			if result == nil then return result, span end
-		end
+			if result == false then
+				table.insert(self.comments, span)
+			end
+		until result ~= false
+		---@cast result Token
 
 		-- print("Tokenizer: Generated " .. util.dump(result))
 
@@ -386,6 +391,7 @@ function Lexer:createTokenGenerator()
 
 		result.index = index
 		result.span = span
+		result.supertype = "token"
 		return result, span
 	end
 end

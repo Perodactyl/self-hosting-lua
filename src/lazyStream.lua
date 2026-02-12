@@ -150,21 +150,21 @@ end
 
 function LazyStream:nextIfEq(value, ...)
 	if self:eq(value, ...) then
-		self:next()
-		return true
+		return self:next()
 	end
-	return false
+	return nil
 end
 
 ---@param value any
 ---@param recoverable boolean
----@param message? string
-function LazyStream:expect(value,recoverable,message)
+---@param message string | nil
+---@param type "cause" | "normal" | "quantifier" | "entry" | nil
+function LazyStream:expect(value,recoverable,message,type)
 	if self:isDone() then
-		error((self:errorHere(recoverable, message or ("Expected " .. prettyOutput.dump(value, false) .. ", got EOF"))))
+		error((self:errorHere(recoverable, message or ("Expected " .. prettyOutput.dump(value, false) .. ", got EOF")):ofType(type)))
 	end
 	if not self:eq(value) then
-		error((self:errorNext(recoverable, message or ("Expected " .. prettyOutput.dump(value, false)))))
+		error((self:errorNext(recoverable, message or ("Expected " .. prettyOutput.dump(value, false))):ofType(type)))
 	end
 	return self:next()
 end
@@ -231,7 +231,7 @@ function LazyStream:scope(name, members)
 
 		if not success then
 			if type(value) == "table" and value.isError then
-				local propagatedError = value:extend("While parsing '" .. fun[1] .. "' branch of '" .. name .. "'", span)
+				local propagatedError = value:extend("While parsing '" .. fun[1] .. "' branch of '" .. name .. "'", span):ofType("quantifier")
 				if value.recoverable then
 					table.insert(errors, propagatedError)
 				else
@@ -249,7 +249,7 @@ function LazyStream:scope(name, members)
 		if type(value) == "table" and value.isError then
 			span = span + self:atNext()
 			self:recall()
-			local propagatedError = value:extend("While parsing '" .. fun[1] .. "' branch of '" .. name .. "'", span)
+			local propagatedError = value:extend("While parsing '" .. fun[1] .. "' branch of '" .. name .. "'", span):ofType("quantifier")
 
 			if value.recoverable then
 				table.insert(errors, propagatedError)
@@ -263,7 +263,7 @@ function LazyStream:scope(name, members)
 		end
 	end
 
-	return Error.group("Expected " .. name, errors)
+	return Error.group("Expected " .. name, errors):ofType("quantifier")
 end
 
 return LazyStream

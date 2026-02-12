@@ -37,7 +37,7 @@ function JSON.stringifyAny(tbl, color, state)
 		if List.isList(tbl) then
 			local output = "["
 			for i,v in ipairs(tbl) do
-				output = output .. prettyOutput.dumpJSON(v, color, state)
+				output = output .. JSON.stringifyAny(v, color, state)
 				if i ~= #tbl then output = output .. "," end
 			end
 			output = output .. "]"
@@ -48,7 +48,7 @@ function JSON.stringifyAny(tbl, color, state)
 				output = output
 					.. format.string(k, color, false, "json")
 					.. ':'
-					.. prettyOutput.dumpJSON(v, color, state)
+					.. JSON.stringifyAny(v, color, state)
 
 				if next(tbl,k) ~= nil then output = output .. "," end
 			end

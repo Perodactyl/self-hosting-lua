@@ -115,7 +115,9 @@ function prettyOutput.tokenListFormatter(key, row, color)
 		if row.type == "symbol" then return tostring(row.value) end
 		if row.type == "operator" then return tostring(row.value) end
 		if row.type == "assign" then return tostring(row.value) end
-		if row.type == "nilLiteral" then return format.literal("nil", color) end
+		if row.type == "nil" then return format.literal("nil", color) end
+		if row.type == "bool" then return format.literal(tostring(row.value), color) end
+		if row.type == "string" then return format.string(row.value, color, true, "lua5.2") end
 	end
 
 	if key == "parsed" then
@@ -158,7 +160,7 @@ function prettyOutput.table(values, columnTitles, formatter)
 			table.insert(columns, {
 				title = titleStr,
 				titleWidth = titleLength,
-				width = titleLength,
+				width = titleLength + 1,
 				members = {},
 			})
 		end

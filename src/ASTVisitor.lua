@@ -63,27 +63,29 @@ end
 
 ---@param delimiter Delimiter
 function Visitor:visitDelimiter(delimiter)
-	self:visitSymbol(";")
+	self:visitSymbol(delimiter.token)
 end
 
 ---@param assignment Assignment
 function Visitor:visitAssignment(assignment)
-	if assignment.isLocal then self:visitKeyword("local") end
-	for i,var in ipairs(assignment.variables) do
-		if assignment.isLocal then
-			self:visitDefinition(var --[[@as PrefixIdentifierAccessExpression]], true)
+	if assignment.localToken then self:visitKeyword(assignment.localToken) end
+	for i,var in ipairs(assignment.variables.values) do
+		if assignment.localToken then
+			self:visitDefinition(var --[[@as PrefixIdentifierAccessExpression]], true, false)
 		else
 			self:visitAccess(var)
 		end
-		if i ~= #assignment.variables then
-			self:visitSymbol(",")
+		if assignment.variables.separators[i] ~= nil then
+			self:visitSymbol(assignment.variables.separators[i])
 		end
 	end
-	self:visitAssign("=")
-	for i,val in ipairs(assignment.values) do
-		self:visitExpression(val)
-		if i ~= #assignment.values then
-			self:visitSymbol(",")
+	if assignment.right then
+		self:visitAssign(assignment.right.assign)
+		for i,val in ipairs(assignment.right.values.values) do
+			self:visitExpression(val)
+			if assignment.right.values.separators[i] ~= nil then
+				self:visitSymbol(assignment.right.values.separators[i])
+			end
 		end
 	end
 end
@@ -93,17 +95,23 @@ end
 function Visitor:visitFunctionCall(call, isStatement)
 	self:visitPrefix(call.callee)
 	if call.method ~= nil then
-		self:visitSymbol(":")
-		self:visitIdentifier(call.method)
+		self:visitSymbol(call.method.token)
+		self:visitIdentifier(call.method.name)
 	end
-	self:visitSymbol("(")
-	for i,arg in ipairs(call.args) do
-		self:visitExpression(arg)
-		if i ~= #call.args then
-			self:visitSymbol(",")
+	if call.args.type == "parenthesis" then
+		self:visitSymbol(call.args.openParen)
+		for i,arg in ipairs(call.args.arguments.values) do
+			self:visitExpression(arg)
+			if call.args.arguments.separators[i] ~= nil then
+				self:visitSymbol(call.args.arguments.separators[i])
+			end
 		end
+		self:visitSymbol(call.args.closeParen)
+	elseif call.args.type == "string" then
+		self:visitStringLiteral(call.args)
+	elseif call.args.type == "table" then
+		self:visitTableLiteral(call.args)
 	end
-	self:visitSymbol(")")
 end
 
 ---@param label Label
@@ -150,21 +158,21 @@ end
 
 ---@param ifStatement If
 function Visitor:visitIf(ifStatement)
-	self:visitKeyword("if")
+	self:visitKeyword(ifStatement.ifToken)
 	self:visitExpression(ifStatement.condition)
-	self:visitKeyword("then")
+	self:visitKeyword(ifStatement.thenToken)
 	self:visitBlock(ifStatement.body)
 	for _,elseifBranch in ipairs(ifStatement.elseifs) do
-		self:visitKeyword("elseif")
+		self:visitKeyword(elseifBranch.elseifToken)
 		self:visitExpression(elseifBranch.condition)
-		self:visitKeyword("then")
+		self:visitKeyword(elseifBranch.thenToken)
 		self:visitBlock(elseifBranch.body)
 	end
-	if ifStatement.elseBody then
-		self:visitKeyword("else")
-		self:visitBlock(ifStatement.elseBody)
+	if ifStatement.elsePart then
+		self:visitKeyword(ifStatement.elsePart.token)
+		self:visitBlock(ifStatement.elsePart.body)
 	end
-	self:visitKeyword("end")
+	self:visitKeyword(ifStatement.endToken)
 end
 
 ---@param forRange ForRange
@@ -207,9 +215,9 @@ end
 
 ---@param funcDef FuncDef
 function Visitor:visitFuncDef(funcDef)
-	if funcDef.isLocal then self:visitKeyword("local") end
-	self:visitKeyword("function")
-	self:visitDefinition(funcDef.name.base, funcDef.isLocal)
+	if funcDef.localToken then self:visitKeyword(funcDef.localToken) end
+	self:visitKeyword(funcDef.functionToken)
+	self:visitDefinition(funcDef.name.base, funcDef.localToken ~= nil, true)
 	for _,access in ipairs(funcDef.name.accesses) do
 		self:visitSymbol(".")
 		self:visitIdentifier(access)
@@ -223,26 +231,25 @@ end
 
 ---@param impl FuncImpl
 function Visitor:visitFuncImpl(impl)
-	self:visitSymbol("(")
-	for i,param in ipairs(impl.parameters) do
-		self:visitIdentifier(param)
-		if i ~= #impl.parameters then
-			self:visitSymbol(",")
+	self:visitSymbol(impl.openParen)
+	for i,param in ipairs(impl.parameters.values) do
+		self:visitAccess(param)
+		if impl.parameters.separators[i] ~= nil then
+			self:visitSymbol(impl.parameters.separators[i])
 		end
 	end
 	if impl.rest then
-		if impl.parameters ~= 0 then self:visitSymbol(",") end
-		self:visitVarArg()
+		self:visitVarArg(impl.rest)
 	end
-	self:visitSymbol(")")
+	self:visitSymbol(impl.closeParen)
 
 	self:visitBlock(impl.body)
-	self:visitKeyword("end")
+	self:visitKeyword(impl.endToken)
 end
 
 ---@param returnStatement ReturnStatement
 function Visitor:visitReturnStatement(returnStatement)
-	self:visitKeyword("return")
+	self:visitKeyword(returnStatement.returnToken)
 	for _,expr in ipairs(returnStatement) do
 		self:visitExpression(expr)
 	end
@@ -251,7 +258,7 @@ end
 ---@param expr Expression
 function Visitor:visitExpression(expr)
 	if expr.type == "nil"         then self:visitNilLiteral(expr)
-	elseif expr.type == "bool"    then self:visitBoolLiteral(expr)
+	elseif expr.type == "boolean" then self:visitBoolLiteral(expr)
 	elseif expr.type == "number"  then self:visitNumLiteral(expr)
 	elseif expr.type == "string"  then self:visitStringLiteral(expr)
 	elseif expr.type == "table"   then self:visitTableLiteral(expr)
@@ -263,27 +270,27 @@ function Visitor:visitExpression(expr)
 	end
 end
 
----@param keyword Keyword
+---@param keyword KeywordToken
 function Visitor:visitKeyword(keyword)
 
 end
 
----@param ident string
+---@param ident IdentifierToken
 function Visitor:visitIdentifier(ident)
 
 end
 
----@param symbol Symbol
+---@param symbol SymbolToken
 function Visitor:visitSymbol(symbol)
 
 end
 
----@param assign Assign
+---@param assign AssignToken
 function Visitor:visitAssign(assign)
 
 end
 
----@param operator Operator
+---@param operator OperatorToken
 function Visitor:visitOperator(operator)
 
 end
@@ -310,19 +317,27 @@ end
 
 ---@param literal TableLiteralExpression
 function Visitor:visitTableLiteral(literal)
-	self:visitSymbol("{")
-	for i,field in ipairs(literal.value) do
-		if field.key.type ~= "number" or field.key.value == i then
-			self:visitSymbol("[")
+	self:visitSymbol(literal.openBrace)
+	for i,field in ipairs(literal.fields.values) do
+		if field.tokens.type == "identifier" then
+			if field.key.type ~= "identifier" then
+				error("Field is of type identifier, but its key is not of type identifier")
+			end
+			self:visitIdentifier(field.key.inner --[[@as IdentifierToken]])
+			self:visitAssign(field.tokens.assign)
+		elseif field.tokens.type == "expression" then
+			self:visitSymbol(field.tokens.openBracket)
 			self:visitExpression(field.key)
-			self:visitSymbol("]")
-			self:visitAssign("=")
+			self:visitSymbol(field.tokens.closeBracket)
+			self:visitAssign(field.tokens.assign)
 		end
 
 		self:visitExpression(field.value)
-		self:visitSymbol(",")
+		if literal.fields.separators[i] ~= nil then
+			self:visitSymbol(literal.fields.separators[i])
+		end
 	end
-	self:visitSymbol("}")
+	self:visitSymbol(literal.closeBrace)
 end
 
 ---@param vararg? VarArgExpression If nil, this is a rest parameter in a func def
@@ -342,7 +357,7 @@ end
 
 ---@param funcDef FunctionExpression
 function Visitor:visitFuncDefExpr(funcDef)
-	self:visitKeyword("function")
+	self:visitKeyword(funcDef.functionToken)
 	self:visitFuncImpl(funcDef.impl)
 end
 
@@ -354,9 +369,9 @@ function Visitor:visitPrefix(prefix)
 	elseif prefix.subtype == "call" then
 		self:visitFunctionCall(prefix.call, false)
 	elseif prefix.subtype == "group" then
-		self:visitSymbol("(")
+		self:visitSymbol(prefix.openParen)
 		self:visitExpression(prefix.inner)
-		self:visitSymbol(")")
+		self:visitSymbol(prefix.closeParen)
 	end
 end
 
@@ -365,11 +380,9 @@ function Visitor:visitAccess(access)
 	if access.subtype == "identifier" then
 		if access.binding ~= nil then
 			self:visitBinding(access.binding)
-			self:visitIdentifier(access.binding.name)
-		else
-			-- util.eprint("\x1b[33mIdentifier is not bound to a scope: " .. access.inner .. "\x1b[39m")
-			self:visitIdentifier(access.inner)
 		end
+		-- util.eprint("\x1b[33mIdentifier is not bound to a scope: " .. access.inner .. "\x1b[39m")
+		self:visitIdentifier(access.inner)
 	elseif access.subtype == "dot" then
 		self:visitPrefix(access.left)
 		self:visitSymbol(".")
@@ -384,13 +397,12 @@ end
 
 ---@param define PrefixIdentifierAccessExpression
 ---@param isLocal boolean
-function Visitor:visitDefinition(define, isLocal)
+---@param isFunction boolean
+function Visitor:visitDefinition(define, isLocal, isFunction)
 	if define.binding ~= nil then
 		self:visitBinding(define.binding)
-		self:visitIdentifier(define.binding.name)
-	else
-		self:visitIdentifier(define.inner)
 	end
+	self:visitIdentifier(define.inner)
 end
 
 ---@param expr BinaryExpression

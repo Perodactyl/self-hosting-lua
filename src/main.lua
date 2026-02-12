@@ -20,25 +20,41 @@ for i,group in ipairs(tests) do
 	end
 end
 
+local function stripSources(value, state)
+	if state == nil then state = {} end
+	if type(value) == "table" then
+		for k,v in pairs(value) do
+			if type(v) == "table" and not util.tableUtils.hasV(state, v) then
+				table.insert(state, v)
+				if v.supertype == "token" then
+					v.span.source = nil
+				else
+					stripSources(v, state)
+				end
+			end
+		end
+	end
+end
+
 local function runTest(name, test, showSuccess, alwaysPrintTestName)
 	local source = Source.new("=test", test.source)
-	if true then
-		source.sourceTokens:save()
-		while not source.sourceTokens:isDone() do
-			source.sourceTokens:next()
-		end
-		source.sourceTokens:recall()
-		os.exit()
-	end
+	-- if true then
+	-- 	source.sourceTokens:save()
+	-- 	while not source.sourceTokens:isDone() do
+	-- 		source.sourceTokens:next()
+	-- 	end
+	-- 	source.sourceTokens:recall()
+	-- 	os.exit()
+	-- end
 	local parser = Parser.new(source)
 
 	local uncrashed, result = xpcall(parser[test.parser], debug.traceback, parser)
 
-	local success = uncrashed and result ~= nil and not result.isError and (test.result == nil or util.tableUtils.deepEq(test.result, result))
+	local success = uncrashed and result ~= nil and not result.isError and (test.result == nil or util.tableUtils.deepEq(test.result, result,"b"))
 
 	if not success then
 
-		print("Test " .. name .. " \x1b[31;1;4mfailed\x1b[39;21;24m")
+		print("Test " .. name .. " \x1b[31;1;4mfailed\x1b[39;22;24m")
 
 		-- local remainingTokens = 0
 		-- if uncrashed then
@@ -64,8 +80,8 @@ local function runTest(name, test, showSuccess, alwaysPrintTestName)
 			print((util.prettyOutput.table(tokens, {"index", "type", "value", "span"}, util.prettyOutput.tokenListFormatter)))
 			print("")
 
-			if not result.isError and not util.deepEq(test.result, result) then
-				print("Expected Result: " .. util.dump(test.result,true,true))
+			if not result.isError and not util.tableUtils.deepEq(test.result, result) then
+				print("Expected Result: " .. util.prettyOutput.dump(test.result,true,true))
 			else
 				print(result:stringify())
 			end
@@ -74,23 +90,24 @@ local function runTest(name, test, showSuccess, alwaysPrintTestName)
 		end
 
 	elseif not parser.tokenStream:isDone() then
-		print("Test " .. name .. " \x1b[32;1;4mpassed\x1b[39;21;24m with \x1b[33mremaining tokens\x1b[39m")
+		print("Test " .. name .. " \x1b[32;1;4mpassed\x1b[39;22;24m with \x1b[33mremaining tokens\x1b[39m")
 
 		local tokens = source.sourceTokens.buffer
-		print((util.table(tokens, {"index", "type", "value", "span"}, util.tokenListFormatter)))
+		print((util.prettyOutput.table(tokens, {"index", "type", "value", "span"}, util.prettyOutput.tokenListFormatter)))
 		print("")
 	elseif test.autotest and test.result == nil and os.getenv("SHOW_MISSING_AUTOTEST") ~= "0" then
-		print("Test " .. name .. " \x1b[32;1;4mpassed\x1b[39;21;24m with \x1b[33mno autotest constraint\x1b[39m")
+		print("Test " .. name .. " \x1b[32;1;4mpassed\x1b[39;22;24m with \x1b[33mno autotest constraint\x1b[39m")
 	elseif alwaysPrintTestName then
-		print("Test " .. name .. " \x1b[32;1;4mpassed\x1b[39;21;24m")
+		print("Test " .. name .. " \x1b[32;1;4mpassed\x1b[39;22;24m")
 	end
 
 	if showSuccess or not success or (test.autotest and test.result == nil and os.getenv("SHOW_MISSING_AUTOTEST") ~= "0") or not parser.tokenStream:isDone() then
 		if uncrashed then
 			print("")
 			if result.isError then
-				print(result:stringify())
+				-- print(result:stringify())
 			else
+				stripSources(result)
 				print("Result: " .. util.prettyOutput.dump(result, true, true))
 			end
 			print("\n")
@@ -132,6 +149,8 @@ elseif SHOW_TEST:match("^[0-9]+%.[0-9]+$") then
 	}
 	showAllResults = true
 	showAllNames = true
+	saveTree = os.getenv("SAVE_TREE")
+	saveCode = os.getenv("SAVE_CODE")
 elseif SHOW_TEST == "at:save" or SHOW_TEST == "at:append" then
 
 	if SHOW_TEST == "at:save" then autotest.reset() end
@@ -151,8 +170,9 @@ elseif SHOW_TEST == "at:save" or SHOW_TEST == "at:append" then
 
 			local name = i .. "." .. j .. " (" .. group.groupName .. ": " ..test.name .. ")"
 
-			local success,result = runTest(util.formatKeyword(name,true), test, true, true)
+			local success,result = runTest(util.format.keyword(name,true), test, true, true)
 			if success then
+				stripSources(result)
 				autotest.set(i .. "." .. j .. "-" .. group.groupName .. "-" .. test.name, result)
 			else
 				any_fail = true
@@ -224,7 +244,7 @@ do
 			if success and saveTree then
 				local file, errmsg = io.open(saveTree, "w")
 				if file then
-					file:write(util.dumpJSON(result, false))
+					file:write(util.json.stringifyAny(result, false))
 					file:close()
 				else
 					print("Failed to save tree: " .. errmsg)

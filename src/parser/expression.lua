@@ -1,4 +1,6 @@
 local util = require("util")
+local Error = require("source.error")
+
 ---@param parser Parser
 return function(parser)
 
@@ -15,53 +17,42 @@ end
 ---@return PrimaryExpression | Error, Span
 function Parser:parsePrimary()
 	if self.tokenStream:isDone() then return self.tokenStream:errorHere(true, "EOF") end
-	return self.tokenStream:scope("primary expression", {
+	local r,s = self.tokenStream:scope("primary expression", {
 		{"nil", function()
 			local token = self.tokenStream:next()
-			if token.type == "nilLiteral" then
-				return {
-					type = "nil",
-				}
+			if token == nil then error("EOF", 0) end
+			if token.type == "nil" then
+				return token
 			end
 			return self.tokenStream:errorHere(true, "Not a nil literal")
 		end},
 		{"boolean", function()
 			local token = self.tokenStream:next()
-			if token.type == "boolLiteral" then
-				return {
-					type = "bool",
-					value = token.value
-				}
+			if token == nil then error("EOF", 0) end
+			if token.type == "boolean" then
+				return token
 			end
 			return self.tokenStream:errorHere(true, "Not a bool literal")
 		end},
 		{"number", function()
 			local token = self.tokenStream:next()
+			if token == nil then error("EOF", 0) end
 			if token.type == "number" then
-				return {
-					type = "number",
-					value = token.value
-				}
+				return token
 			end
 			return self.tokenStream:errorHere(true, "Not a number literal")
 		end},
 		{"string", function()
 			local token = self.tokenStream:next()
+			if token == nil then error("EOF", 0) end
 			if token.type == "string" then
-				return {
-					type = "string",
-					value = token.value
-				}
+				return token
 			end
 			return self.tokenStream:errorHere(true, "Not a string literal")
 		end},
 		{"table", function()
-			local result = self:parseTableLiteral()
-			if result.isError then return result end
-			return {
-				type = "table",
-				value = result
-			}
+			local result = Error.try(self:parseTableLiteral())
+			return result
 		end},
 		{"vararg", function()
 			self.tokenStream:expect({type="symbol",value="..."},true)
@@ -87,6 +78,7 @@ function Parser:parsePrimary()
 			return e,s
 		end},
 	})
+	return r --[[@as PrimaryExpression]],s
 end
 
 ---@return UnaryExpression | PrimaryExpression | Error, Span
@@ -108,12 +100,12 @@ function Parser:parseUnary()
 
 		local right, rightSpan = self:parseUnary()
 		if right.isError then
-			return right:extend("While parsing unary " .. operator)
+			return right:extend("While parsing unary " .. operator.value)
 		end
 
 		return {
 			type = "unary",
-			operator = operator.value,
+			operator = operator,
 			right = right,
 		}, span + rightSpan
 	end
@@ -141,7 +133,7 @@ local function generatePrecedenceFunc(children, operators)
 			expr = {
 				type = "binary",
 				left = expr --[[@as Expression]],
-				operator = operator.value --[[@as string]],
+				operator = operator --[[@as OperatorToken]],
 				right = right --[[@as Expression]],
 			}
 			exprSpan = exprSpan + rightSpan
@@ -196,19 +188,17 @@ Parser.parseBoolOr = generatePrecedenceFunc(
 function Parser:parsePrefixExpression()
 	local access, span = self.tokenStream:scope("prefix start", {
 		{"group", function()
-			self.tokenStream:expect({type="symbol",value="("}, true)
+			local openParen = self.tokenStream:expect({type="symbol",value="("}, true)
 			local exp, expSpan = self:parseExpression()
 			if exp.isError then
 				return exp, expSpan
 			end
-			if not self.tokenStream:nextIfEq({type="symbol",value=")"}) then
-				return self.tokenStream:errorNext(false, "Missing close paren")
-			end
-			return {type="prefix",subtype="group",inner=exp}
+			local closeParen = self.tokenStream:expect({type="symbol",value=")"}, false)
+			return {type="prefix",subtype="group",inner=exp, openParen=openParen, closeParen=closeParen}
 		end},
 		{"access", function()
 			local ident = self.tokenStream:expect({type="identifier"},true)
-			return {type="prefix",subtype="identifier",inner = ident.value}
+			return {type="prefix",subtype="identifier",inner = ident}
 		end},
 	})
 
@@ -285,77 +275,6 @@ function Parser:parseAccess()
 		return value, span
 	end
 	return span:error(true, "Not an access")
-end
-
----@param prefix PrefixExpression
----@return FunctionCall | Error, Span
-function Parser:parseFunctionCall(prefix)
-	local output, span = nil, self.tokenStream:atNext()
-	while not self.tokenStream:isDone() do
-		local name
-		if self.tokenStream:nextIfEq({type="symbol",value=":"}) then
-			name = self.tokenStream:next() -- todo assert this is identifier
-		end
-
-		if self.tokenStream:isDone() then return self.tokenStream:errorHere(true, "EOF before arguments") end
-
-		local arguments, argumentSpan = self.tokenStream:scope("arguments", {
-			{"Parenthetical arguments", function()
-				self.tokenStream:expect({type="symbol",value="("}, true)
-
-				local args
-				if not self.tokenStream:nextIfEq({type="symbol",value=")"}) then
-					args = self:parseSequence(self.parseExpression, {type="symbol",value=","})
-					self.tokenStream:expect({type="symbol",value=")"},false)
-				else
-					args = {}
-				end
-
-				return args
-			end},
-			{"String arguments", function()
-				local str = self.tokenStream:next()
-				---@cast str -?
-				if str.type ~= "string" then
-					return self.tokenStream:errorHere(true, "Not a string literal")
-				end
-				return {{type="string",value=str.value}}
-			end},
-			{"Tabular arguments", function()
-				local lit, tblSpan = self:parseTableLiteral()
-				if lit.isError then return lit end
-				return {{type="tableLiteral",value=lit}}, tblSpan
-			end},
-		})
-
-		if arguments.isError then
-			if arguments.recoverable then
-				break
-			else
-				return arguments, argumentSpan
-			end
-		end
-
-		if name then
-			output = {
-				type = "call",
-				method = name.value,
-				callee = output or prefix,
-				args = arguments,
-			}
-		else
-			output = {
-				type = "call",
-				callee = output or prefix,
-				args = arguments,
-			}
-		end
-	end
-
-	if output == nil then
-		return self.tokenStream:errorHere(true, "Not a call"), span
-	end
-	return output, span
 end
 
 end

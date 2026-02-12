@@ -1,15 +1,16 @@
 ---@meta
 
 ---@class TokenBase
----@field span? Span
----@field index? integer
+---@field span Span
+---@field index integer
+---@field supertype "token"
 ---@field type string
 
 ---@class NilToken: TokenBase
----@field type "nilLiteral"
+---@field type "nil"
 
 ---@class BooleanToken: TokenBase
----@field type "boolLiteral"
+---@field type "boolean"
 ---@field value string
 
 ---@class StringToken: TokenBase

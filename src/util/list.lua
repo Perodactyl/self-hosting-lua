@@ -87,6 +87,15 @@ function List:map(mapper)
 	return output
 end
 
+---Convenience function to get a property on a list of tables
+---@generic K, O
+---@param self List<{[K]: O, [any]: any}>
+---@param key K
+---@return List<O>
+function List:getEach(key)
+	return self:map(function(element) return element[key] end)
+end
+
 ---@generic T
 ---@param self List<T|T[]>
 ---@return List<T>
@@ -141,6 +150,27 @@ function List:find(predicate)
 			return self[i]
 		end
 	end
+end
+
+---@generic T
+---@param self List<T>
+---@param value T
+---@return integer | nil
+function List:indexOf(value)
+	for i,v in ipairs(self) do
+		if v == value then
+			return i
+		end
+	end
+	return nil
+end
+
+---@generic T
+---@param self List<T>
+---@param value T
+---@return boolean
+function List:includes(value)
+	return self:indexOf(value) ~= nil
 end
 
 return List

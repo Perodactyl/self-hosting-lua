@@ -6,7 +6,7 @@ local mappings = {}
 function autotest.save()
 	local file = io.open("generated/autotest-maps.lua", "w")
 	if file then
-		file:write("--[[ File is auto generated " .. os.date("%D %T %Z UTC%z") .. " ]]\nreturn " .. util.dump(mappings, false, true))
+		file:write("--[[ File is auto generated " .. os.date("%D %T %Z UTC%z") .. " ]]\nreturn " .. util.prettyOutput.dump(mappings, false, true))
 		file:close()
 	end
 end

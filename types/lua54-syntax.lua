@@ -4,20 +4,35 @@
 -- Implicit Terminals
 
 --- Name
----@alias Identifier string
+---@alias Identifier IdentifierToken
 --- Numeral
----@alias NumLiteral number
+---@alias NumLiteral NumberToken
 --- LiteralString
----@alias StringLiteral string
+---@alias StringLiteral StringToken
 
 -- Tables
 
 do
 	--- tableconstructor
-	---@alias TableLiteral Field[]
+	---@class TableLiteral
+	---@field type "table"
+	---@field openBrace SymbolToken
+	---@field closeBrace SymbolToken
+	---@field fields Sequence<Field, SymbolToken>
+
+	---@class AutoFieldTokens
+	---@field type "auto"
+	---@class IdentifierFieldTokens
+	---@field type "identifier"
+	---@field assign AssignToken
+	---@class ExpressionFieldTokens
+	---@field openBracket SymbolToken
+	---@field closeBracket SymbolToken
+	---@field assign AssignToken
 
 	--- field
 	---@class Field
+	---@field tokens AutoFieldTokens | IdentifierFieldTokens | ExpressionFieldTokens
 	---@field key Expression
 	---@field value Expression
 end
@@ -32,10 +47,16 @@ do
 	---@field scope? Scope
 
 	--- retstat ::= return [explist] [';']
-	---@alias ReturnStatement Expression[] explist
+	---@class ReturnStatement
+	---@field returnToken KeywordToken
+	---@field expressions explist
 end
 
 -- Statements
+
+---@class Sequence<T,S>: { values: T[], separators: S[] }
+---@alias varlist Sequence<Access, SymbolToken>
+---@alias explist Sequence<Expression, SymbolToken>
 
 do
 	--- stat
@@ -44,15 +65,15 @@ do
 	--- ';' terminal of stat
 	---@class Delimiter
 	---@field type "delimiter"
+	---@field token SymbolToken
 
 	do
 		--- varlist '=' explist
 		---@class Assignment
 		---@field type "assignment"
-		---@field isLocal boolean
-		---@field assign "="
-		---@field variables Access[] varlist
-		---@field values Expression[] explist
+		---@field localToken KeywordToken | nil
+		---@field variables varlist
+		---@field right {assign: AssignToken, values: explist} | nil
 
 		--- var
 		---@alias Access PrefixAccessExpression
@@ -65,51 +86,70 @@ do
 		---@class FunctionExpressionCall
 		---@field type "call"
 		---@field callee PrefixExpression
-		---@field method? Identifier
+		---@field method {token:SymbolToken, name:Identifier}
 		---@field args Arguments
 
 		--- args
 		---@alias Arguments ParenthesisArguments | TableLiteralExpression | StringLiteralExpression
+
 		---@class ParenthesisArguments
 		---@field type "parenthesis"
-		---@field arguments Expression[] explist
+		---@field arguments explist
+		---@field openParen SymbolToken
+		---@field closeParen SymbolToken
 	end
 
 	---@class Label
 	---@field type "label"
+	---@field openToken SymbolToken
+	---@field closeToken SymbolToken
 	---@field name Identifier
 
 	---@class Break
 	---@field type "break"
+	---@field token KeywordToken
 
 	---@class Goto
 	---@field type "goto"
+	---@field token KeywordToken
 	---@field destination Identifier
 
 	---@class Do
 	---@field type "do"
+	---@field openToken KeywordToken
+	---@field closeToken KeywordToken
 	---@field body Block
 
 	---@class While
 	---@field type "while"
+	---@field whileToken KeywordToken
 	---@field condition Expression
+	---@field doToken KeywordToken
 	---@field body Block
+	---@field endToken KeywordToken
 
 	---@class RepeatUntil
 	---@field type "repeatUntil"
+	---@field repeatToken KeywordToken
 	---@field body Block
+	---@field untilToken KeywordToken
 	---@field condition Expression
 
 	do
 		---@class If
 		---@field type "if"
+		---@field ifToken KeywordToken
 		---@field condition Expression
+		---@field thenToken KeywordToken
 		---@field body Block
 		---@field elseifs ElseIfBranch[]
-		---@field elseBody? Block
+		---@field elsePart? {token: KeywordToken, body: Block}
+		---@field endToken KeywordToken
 
 		---@class ElseIfBranch
+		---@field elseifToken KeywordToken
 		---@field condition Expression
+		---@field thenToken KeywordToken
 		---@field body Block
 	end
 
@@ -129,15 +169,19 @@ do
 
 	do
 		---@class FuncImpl
-		---@field parameters Identifier[]
-		---@field rest boolean
+		---@field openParen SymbolToken
+		---@field closeParen SymbolToken
+		---@field rest SymbolToken
+		---@field endToken KeywordToken
+		---@field parameters varlist
 		---@field body Block
 
 		---@class FuncDef
 		---@field type "funcDef"
-		---@field isLocal boolean
 		---@field name FuncName
 		---@field impl FuncImpl
+		---@field functionToken KeywordToken
+		---@field localToken KeywordToken | nil
 
 		--- funcname ::= Name {'.' Name} [':' Name], so a.b:c populates all 3 fields
 		---@class FuncName
@@ -152,6 +196,7 @@ end
 do
 	---@alias Expression NilLiteralExpression | BoolLiteralExpression | NumLiteralExpression | StringLiteralExpression | TableLiteralExpression | VarArgExpression | FunctionExpression | PrefixExpression | BinaryExpression | UnaryExpression
 
+	--[[
 	---@class NilLiteralExpression
 	---@field type "nil"
 
@@ -170,12 +215,20 @@ do
 	---@class TableLiteralExpression
 	---@field type "table"
 	---@field value TableLiteral
+	---]]
+	---@alias NilLiteralExpression NilToken
+	---@alias BoolLiteralExpression BooleanToken
+	---@alias NumLiteralExpression NumLiteral
+	---@alias StringLiteralExpression StringLiteral
+	---@alias TableLiteralExpression TableLiteral
 
 	---@class VarArgExpression
 	---@field type "vararg"
+	---@field token SymbolToken
 
 	---@class FunctionExpression
 	---@field type "funcDef"
+	---@field functionToken KeywordToken
 	---@field impl FuncImpl
 
 	do
@@ -192,6 +245,8 @@ do
 		---@field type "prefix"
 		---@field subtype "group"
 		---@field inner Expression
+		---@field openParen SymbolToken
+		---@field closeParen SymbolToken
 
 		--- Name branch of var
 		---@class PrefixIdentifierAccessExpression
@@ -219,7 +274,7 @@ do
 		---@class BinaryExpression
 		---@field type "binary"
 		---@field left Expression
-		---@field operator BinaryOperator
+		---@field operator OperatorToken
 		---@field right Expression
 
 		---@alias BinaryOperator "+" | "-" | "*" | "/" | "//" | "^" | "%" | "&" | "~" | "|" | ">>" | "<<" | ".." | "<" | "<=" | ">" | ">=" | "==" | "~=" | "and" | "or"
@@ -228,7 +283,7 @@ do
 	do
 		---@class UnaryExpression
 		---@field type "unary"
-		---@field operator UnaryOperator
+		---@field operator OperatorToken
 		---@field right Expression
 
 		---@alias UnaryOperator "-" | "not" | "#" | "~"

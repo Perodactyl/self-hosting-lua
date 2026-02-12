@@ -22,6 +22,7 @@ function Error.new(recoverable, message, span)
 	return setmetatable({
 		recoverable = recoverable,
 		message = message,
+		type = "normal",
 		children = {},
 		span = span,
 	}, errorMt)
@@ -39,10 +40,52 @@ function Error:extend(message, span)
 	}, errorMt), span and span + self.span or self.span
 end
 
---- Modifies self in place, but returns self for chaining
----@return Error
+---Modifies self in place, but returns self for chaining
+---@return Error, Span
 function Error:unrecoverable()
 	self.recoverable = false
+	return self, self.span
+end
+
+---Modifies self in place, but returns self for chaining
+---@param type "normal" | "quantifier" | "cause" | "entry" | nil
+---@return Error, Span
+function Error:ofType(type)
+	if type ~= nil then
+		self.type = type
+	end
+	return self, self.span
+end
+
+---Errors are like onions. This function unwraps the layers of an error to find the root cause.
+---@return Error
+function Error:findCause()
+	-- return self
+	if self.type == "cause" or not self.recoverable then
+		return self
+	elseif #self.children == 0 then
+		return self
+	elseif #self.children == 1 then
+		return self.children[1]:findCause()
+	else
+		local causes = {}
+		for _,child in ipairs(self.children) do
+			local c = child:findCause()
+			if c.type ~= "entry" then
+				table.insert(causes, c)
+			elseif c.type == "cause" then
+				return c
+			end
+		end
+		if #causes == 0 then
+			causes = self.children
+		end
+		if #causes == 1 then
+			return causes[1]:extend(self.message, self.span):ofType(self.type):findCause()
+		end
+		local group = Error.group(self.message, causes)
+		return group
+	end
 	return self
 end
 

@@ -1,3 +1,5 @@
+local Error = require("source.error")
+
 ---@class Parser
 ---@field tokenStream LazyStream<Token>
 local Parser = {}
@@ -17,15 +19,16 @@ function Parser:parseChunk()
 	return self:parseBlock()
 end
 
----@generic T
+---@generic T, S: Token
 ---@param memberParser fun(self: Parser): T|Error,Span?
----@param separator Token
+---@param separator S
 ---@param name? string
----@return T[]|Error,Span
+---@return Sequence<T, S>|Error,Span
 function Parser:parseSequence(memberParser, separator, name)
 	if self.tokenStream:isDone() then return self.tokenStream:errorHere(true, "EOF before sequence") end
 	self.tokenStream:save()
 	local output = {}
+	local separators = {}
 	while not self.tokenStream:isDone() do
 
 		local parseResult = memberParser(self)
@@ -45,63 +48,61 @@ function Parser:parseSequence(memberParser, separator, name)
 
 		table.insert(output, parseResult)
 
-		if not self.tokenStream:nextIfEq(separator) then
+		if not self.tokenStream:eq(separator) then
 			break
 		end
+		table.insert(separators, (self.tokenStream:next() --[[@as Token]]))
 	end
 	local span = self.tokenStream:continue()
-	return output, span
+	return {values=output,separators=separators}, span
 end
 
 ---@return TableLiteral | Error, Span
 function Parser:parseTableLiteral()
-	self.tokenStream:expect({type="symbol",value="{"},true)
+	local openBrace = self.tokenStream:expect({type="symbol",value="{"},true)
+	local closeBrace
 
 	local fields = {}
+	local separators = {}
 	local span = self.tokenStream:here()
 	local i = 0
 	while not self.tokenStream:isDone() do
-		if self.tokenStream:nextIfEq({type="symbol",value="}"}) then
+		if self.tokenStream:eq({type="symbol",value="}"}) then
+			closeBrace = self.tokenStream:next()
 			break
 		end
 
 		local field, fieldSpan = self.tokenStream:scope("Table field", {
 			{"Identifier", function()
-				local key = self.tokenStream:next()
-				if not key then return self.tokenStream:errorHere(true, "No key") end
-				if key.type ~= "identifier" then
-					return self.tokenStream:errorHere(true, "Key not an identifier")
-				end
-
-				if not self.tokenStream:nextIfEq({type="assign",value="="}) then
-					return self.tokenStream:errorHere(true, "No equal after key")
-				end
-
+				local key = self.tokenStream:expect({type="identifier"},true) --[[@as IdentifierToken]]
+				local assign = self.tokenStream:expect({type="assign",value="="}, true)
 				local value = self:parseExpression()
 				if value.isError then return value:unrecoverable() end
 
-				return {key={type="string",value=key.value}, value=value}
+				return {
+					tokens={type="identifier",assign=assign},
+					key={type="string",value=key.value},
+					value=value
+				}
 			end},
 			{"Expression-keyed", function()
-				if not self.tokenStream:nextIfEq({type="symbol",value="["}) then
-					return self.tokenStream:errorHere(true, "No open-bracket")
-				end
-
-				local key = self:parseExpression()
-				if key.isError then return key:unrecoverable() end
-
-				if not self.tokenStream:nextIfEq({type="symbol",value="]"}) then
-					return self.tokenStream:errorHere(true, "No close-bracket"):unrecoverable()
-				end
-
-				if not self.tokenStream:nextIfEq({type="assign",value="="}) then
-					return self.tokenStream:errorHere(true, "No equal after key"):unrecoverable()
-				end
-
+				local openBracket = self.tokenStream:expect({type="symbol",value="["}, true)
+				local key = Error.try(self:parseExpression())
+				local closeBracket = self.tokenStream:expect({type="symbol",value="]"}, true)
+				local assign = self.tokenStream:expect({type="assign",value="="}, true)
 				local value = self:parseExpression()
 				if value.isError then return value:unrecoverable() end
 
-				return {key=key, value=value}
+				return {
+					tokens={
+						type="expression",
+						openBracket=openBracket,
+						closeBracket=closeBracket,
+						assign=assign
+					},
+					key=key,
+					value=value,
+				}
 			end},
 			{"Auto-keyed", function()
 				local value = self:parseExpression()
@@ -109,33 +110,40 @@ function Parser:parseTableLiteral()
 
 				i = i + 1
 
-				return {key={type="number",value=i},value=value}
+				return {
+					tokens={type="auto"},
+					key={type="number",value=i},
+					value=value
+				}
 			end},
 		})
 
-		if field.isError then return field, fieldSpan end
+		if field.isError then return field --[[@as Error]], fieldSpan end
 		table.insert(fields, field)
 		span = span + fieldSpan
 
 		local sep = self.tokenStream:next()
 		if sep == nil then return self.tokenStream:errorHere(false, "Unterminated table literal") end
 		if sep.type == "symbol" and sep.value == "}" then
+			closeBrace = sep
 			break
 		elseif sep.type == "symbol" and (sep.value == ";" or sep.value == ",") then
-			-- 
+			table.insert(separators, sep)
 		else
 			return self.tokenStream:errorHere(false, "No separator between elements")
 		end
 	end
 
-	return fields, span
+	return {
+		openBrace = openBrace,
+		closeBrace = closeBrace,
+		fields = { values = fields, separators = separators },
+	}, span
 end
 
 ---@return FuncImpl|Error, Span
 function Parser:parseFunctionDefinition()
-	if not self.tokenStream:nextIfEq({type="symbol",value="("}) then
-		return self.tokenStream:errorHere(true, "No open paren after name")
-	end
+	local openParen = self.tokenStream:expect({type="symbol",value="("}, true)
 	local span = self.tokenStream:here()
 
 	local parameters, parametersSpan = self:parseSequence(function()
@@ -159,21 +167,88 @@ function Parser:parseFunctionDefinition()
 	if parameters.isError then
 		return parameters, parametersSpan
 	end
-	-- TODO rest parameter
 
-	if not self.tokenStream:nextIfEq({type="symbol",value=")"}) then
-		return self.tokenStream:errorHere(false, "No close paren after params")
-	end
+	local closeParen = self.tokenStream:expect({type="symbol",value=")"}, false)
 
-	local body, bodySpan = self:parseBlock({type="keyword",value="end"})
-	if body.isError then return body, bodySpan end
-	self.tokenStream:next() -- skip end kw
+	local body, bodySpan = Error.try(self:parseBlock({type="keyword",value="end"}))
+	local endToken = self.tokenStream:expect({type="keyword",value="end"}, false)
 
 	return {
 		parameters = parameters,
-		rest = false,
+		rest = nil,
 		body = body,
+		openParen = openParen,
+		closeParen = closeParen,
+		endToken = endToken,
 	}, span + (bodySpan:shr(1))
+end
+
+---@param prefix PrefixExpression
+---@return FunctionCall | Error, Span
+function Parser:parseFunctionCall(prefix)
+	local output, span = nil, self.tokenStream:atNext()
+	while not self.tokenStream:isDone() do
+		local method
+		local methodColon = self.tokenStream:nextIfEq({type="symbol",value=":"})
+		if methodColon ~= nil then
+			method = {
+				token = methodColon,
+				name = self.tokenStream:expect({type="identifier"}, false, nil, "cause")
+			}
+		end
+
+		local arguments, argumentSpan = self.tokenStream:scope("arguments", {
+			---@return ParenthesisArguments | Error
+			{"Parenthetical arguments", function()
+				local openParen = self.tokenStream:expect({type="symbol",value="("}, true, nil, "entry")
+
+				local args
+				local closeParen = self.tokenStream:nextIfEq({type="symbol",value=")"})
+				if not closeParen then
+					args = self:parseSequence(self.parseExpression, {type="symbol",value=","})
+					closeParen = self.tokenStream:expect({type="symbol",value=")"},false)
+				else
+					args = {values={},separators={}}
+				end
+
+				return {
+					type = "parenthesis",
+					arguments = args,
+					openParen = openParen,
+					closeParen = closeParen,
+				}
+			end},
+			{"String arguments", function()
+				local str = self.tokenStream:expect({type="string"}, true, nil, "entry")
+				return str
+			end},
+			{"Tabular arguments", function()
+				local lit, tblSpan = self:parseTableLiteral()
+				if lit.isError then return lit end
+				return lit, tblSpan
+			end},
+		})
+
+		if arguments.isError then
+			if arguments.recoverable then
+				break
+			else
+				return arguments, argumentSpan
+			end
+		end
+
+		output = {
+			type = "call",
+			method = method,
+			callee = output or prefix,
+			args = arguments,
+		}
+	end
+
+	if output == nil then
+		return self.tokenStream:errorHere(true, "Not a call"), span
+	end
+	return output, span
 end
 
 return Parser

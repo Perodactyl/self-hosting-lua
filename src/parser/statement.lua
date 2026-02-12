@@ -1,4 +1,5 @@
 local Error = require("source.error")
+local prettyOutput = require("util.prettyOutput")
 local try = Error.try
 
 ---@param parser Parser
@@ -18,7 +19,7 @@ function Parser:parseBlock(lastToken, ...)
 	while not self.tokenStream:isDone() and not self.tokenStream:eq(lastToken, ...) do
 		local statement, statementSpan = self:parseStatement()
 		if statement.isError then
-			return statement:extend("In statement " .. #statements + 1), statementSpan
+			return statement:extend("In statement " .. #statements + 1):ofType("quantifier"), statementSpan
 		end
 
 		span = span + statementSpan
@@ -45,29 +46,21 @@ function Parser:parseStatement()
 			local localKw = self.tokenStream:nextIfEq({type="keyword",value="local"})
 			-- self.tokenStream:expect({type="identifier"},true) -- not valid here because we don't want to consume it
 			if not self.tokenStream:eq({type = "identifier"}) then
-				return self.tokenStream:errorNext(true, "No identifiers to begin assignment")
+				return self.tokenStream:errorNext(true, "No identifiers to begin assignment"):ofType("entry")
 			end
 
-			local variables, varSpan = self:parseSequence(self.parseAccess, {type="symbol",value=","}, "varlist")
-			if variables.isError then
-				return variables, varSpan
+			local variables, varSpan = Error.try(self:parseSequence(self.parseAccess, {type="symbol",value=","}, "varlist"))
+
+			if #variables.values == 0 then
+				return self.tokenStream:errorHere(true, "No variables"):ofType("entry")
 			end
 
-			if #variables == 0 then
-				return self.tokenStream:errorHere(true, "No variables")
-			end
+			-- log(prettyOutput.dump(variables))
 
 			---@type ({assign:"=",values:Expression[]}|Error), Span
-			local assignAndValues, span = self.tokenStream:scope("assignment operator and values", {
+			local right, span = self.tokenStream:scope("assignment operator and values", {
 				{"Values present", function()
-					local assign = self.tokenStream:next()
-
-					if assign == nil then
-						return self.tokenStream:errorHere(true, "No assignment operator")
-					end
-					if assign.type ~= "assign" then
-						return self.tokenStream:errorHere(true, "Assignment operator was not of type assign")
-					end
+					local assign = self.tokenStream:expect({type="assign"}, true, nil, "entry")
 					if localKw and assign.value ~= "=" then
 						return self.tokenStream:errorHere(false, "Local definitions only allow assignment with =")
 					end
@@ -78,27 +71,27 @@ function Parser:parseStatement()
 						return assignValues
 					end
 
-					return {assign=assign.value, values=assignValues}
+					return {assign=assign, values=assignValues}
 				end},
 				{"Local without values", function()
 					if not localKw then
-						return self.tokenStream:errorHere(true, "Not a local; must have values")
+						return self.tokenStream:errorHere(true, "Not a local; must have values"):ofType("entry")
 					end
 					local assign = self.tokenStream:peek()
 					if assign ~= nil and assign.type == "assign" then
-						return self.tokenStream:errorNext(true, "Assignment operator found")
+						return self.tokenStream:errorNext(true, "Assignment operator found"):ofType("entry")
 					end
-					return {assign="=", values={}}
+					return -1
 				end},
 			})
 
-			if assignAndValues.isError then return assignAndValues, span end
+			if right ~= -1 and right.isError then return right, span end
 
 			return {
-				type="assignment",isLocal=localKw,
+				type="assignment",
+				localToken=localKw,
 				variables=variables,
-				assign=assignAndValues.assign,
-				values=assignAndValues.values
+				right = right == -1 and nil or right,
 			}
 		end},
 
@@ -111,12 +104,12 @@ function Parser:parseStatement()
 			if callee.subtype == "call" then
 				return callee.call
 			end
-			return calleeSpan:error(true, "Prefix was not of type call")
+			return calleeSpan:error(true, "Prefix was not of type call"):ofType("entry")
 		end},
 
 		{"Do..end", function() -- do block
 			if not self.tokenStream:nextIfEq({type="keyword",value="do"}) then
-				return self.tokenStream:errorNext(true, "No do kw")
+				return self.tokenStream:errorNext(true, "No do kw"):ofType("entry")
 			end
 
 			local body = try(self:parseBlock({type="keyword",value="end"}))
@@ -129,16 +122,9 @@ function Parser:parseStatement()
 		end},
 
 		{"If..then", function() --if
-			if not self.tokenStream:nextIfEq({type="keyword",value="if"}) then
-				return self.tokenStream:errorNext(true, "No if kw")
-			end
-			local condition, conditionSpan = self:parseExpression()
-			if condition.isError then
-				return condition:unrecoverable():extend("while parsing if condition"), conditionSpan
-			end
-			if not self.tokenStream:nextIfEq({type="keyword",value="then"}) then
-				return self.tokenStream:errorNext(false, "No then kw")
-			end
+			local ifKw = self.tokenStream:expect({type="keyword",value="if"}, true, nil, "entry")
+			local condition = Error.try(self:parseExpression())
+			local thenKw = self.tokenStream:expect({type="keyword",value="then"}, false)
 
 			local body = self:parseBlock(
 				{type="keyword",value="end"},
@@ -148,17 +134,17 @@ function Parser:parseStatement()
 			if body.isError then return body end
 
 			local elseifs = {}
-			local elseBody
+			local elsePart
+
+			local endKw
 
 			while true do
-				local lastSymbol = self.tokenStream:next()
-				if lastSymbol == nil then break end
+				local lastSymbol = self.tokenStream:expect({type="keyword"}, false)
+				-- if lastSymbol == nil then break end
 
 				if lastSymbol.value == "elseif" then
 					local elseifCondition = self:parseExpression()
-					if not self.tokenStream:nextIfEq({type="keyword",value="then"}) then
-						return self.tokenStream:errorHere(false, "Elseif clause missing then kw")
-					end
+					local elseifThenKw = self.tokenStream:expect({type="keyword",value="then"}, true)
 
 					local elseifBody = self:parseBlock(
 						{type="keyword",value="end"},
@@ -168,30 +154,37 @@ function Parser:parseStatement()
 
 					if elseifBody.isError then return elseifBody end
 
-					table.insert(elseifs, {condition=elseifCondition,body=elseifBody})
+					table.insert(elseifs, {
+						elseifToken = lastSymbol,
+						condition=elseifCondition,
+						thenToken=elseifThenKw,
+						body=elseifBody
+					})
 				elseif lastSymbol.value == "else" then
-					elseBody = self:parseBlock({type="keyword",value="end"})
-					if elseBody.isError then return elseBody end
-					self.tokenStream:next() -- skip end kw
-					break
+					elsePart = {
+						token = lastSymbol,
+						body = Error.try(self:parseBlock({type="keyword",value="end"}))
+					}
 				elseif lastSymbol.value == "end" then
+					endKw = lastSymbol
 					break
 				end
 			end
 
 			return {
 				type = "if",
+				ifToken = ifKw,
 				condition = condition,
+				thenToken = thenKw,
 				body = body,
 				elseifs = elseifs,
-				elseBody = elseBody,
+				elsePart = elsePart,
+				endToken = endKw,
 			}
 		end},
 
 		{"For..=", function() -- numeric for loop
-			if not self.tokenStream:nextIfEq({type="keyword",value="for"}) then
-				return self.tokenStream:errorNext(true, "No for kw")
-			end
+			local forKw = self.tokenStream:expect({type="keyword",value="for"}, true, nil, "entry")
 
 			local name = self.tokenStream:next()
 			if name == nil then
@@ -239,9 +232,7 @@ function Parser:parseStatement()
 		end},
 
 		{"For..in", function()
-			if not self.tokenStream:nextIfEq({type="keyword",value="for"}) then
-				return self.tokenStream:errorNext(true, "No for kw")
-			end
+			local forKw = self.tokenStream:expect({type="keyword",value="for"}, true, nil, "entry")
 			local variables, variablesReason = self:parseSequence(function()
 				local name = self.tokenStream:next()
 				if name == nil then return nil, "Missing variable name" end
@@ -271,9 +262,7 @@ function Parser:parseStatement()
 		end},
 
 		{"While loop", function()
-			if not self.tokenStream:nextIfEq({type="keyword",value="while"}) then
-				return self.tokenStream:errorNext(true, "No while kw")
-			end
+			local whileKw = self.tokenStream:expect({type="keyword",value="while"}, true, nil, "entry")
 			local condition = self:parseExpression()
 
 			if not self.tokenStream:nextIfEq({type="keyword",value="do"}) then
@@ -291,7 +280,7 @@ function Parser:parseStatement()
 		end},
 
 		{"Repeat..until", function()
-			self.tokenStream:expect({type="keyword",value="repeat"},true)
+			local repeatKw = self.tokenStream:expect({type="keyword",value="repeat"},true, nil, "entry")
 
 			local body = try(self:parseBlock({type="keyword",value="until"}))
 			self.tokenStream:next()
@@ -308,14 +297,12 @@ function Parser:parseStatement()
 		---@return FuncDef | nil, string?
 		{"Function definition", function() -- function definition
 			local localKw = self.tokenStream:nextIfEq({type="keyword",value="local"})
-			if not self.tokenStream:nextIfEq({type="keyword",value="function"}) then
-				return self.tokenStream:errorNext(true, "No function kw")
-			end
+			local functionKw = self.tokenStream:expect({type="keyword",value="function"},true, nil, "entry")
 
 			local name
 			if not localKw then
 				name = {
-					base = {type="prefix",subtype="identifier",inner=self.tokenStream:next().value}, --todo handle eof and stuff
+					base = {type="prefix",subtype="identifier",inner=self.tokenStream:next()}, --todo handle eof and stuff
 					accesses = {},
 					method = nil,
 				}
@@ -337,20 +324,26 @@ function Parser:parseStatement()
 				if ident.type ~= "identifier" then
 					return self.tokenStream:errorHere(true, "Local fn name not an identifier")
 				end
-				name = ident.value
+				name = {
+					base = {type="prefix",subtype="identifier",inner=ident},
+					accesses = {},
+					method = nil,
+				}
 			end
 
 			local impl = self:parseFunctionDefinition()
 			if impl.isError then return impl end
 
 			return {
-				type = localKw and "localFuncDef" or "funcDef",
+				type = "funcDef",
 				name = name,
 				impl = impl,
+				localToken = localKw,
+				functionToken = functionKw,
 			}
 		end},
 		{"Return", function() --return
-			self.tokenStream:expect({type="keyword",value="return"}, true)
+			local returnKw = self.tokenStream:expect({type="keyword",value="return"}, true, nil, "entry")
 
 			local values =
 				self:parseSequence(self.parseExpression, {type="symbol",value=","}, "return values")
@@ -368,37 +361,35 @@ function Parser:parseStatement()
 			}
 		end},
 		{"Label", function()
-			if not self.tokenStream:nextIfEq({type="symbol",value="::"}) then
-				return self.tokenStream:errorNext(true, "No start double colon")
-			end
+			local startDColon = self.tokenStream:expect({type="symbol",value="::"}, true, nil, "entry")
 			local name = self.tokenStream:next()
 			if name == nil then return nil, "No label name" end
 			if name.type ~= "identifier" then return nil, "Label name is not an identifier" end
-			if not self.tokenStream:nextIfEq({type="symbol",value="::"}) then return nil, "No end double colon" end
+			local endDColon = self.tokenStream:expect({type="symbol",value="::"}, false)
 
 			return {
 				type = "label",
 				name = name.value,
 			}
 		end},
+		---@return Goto | Error
 		{"Goto", function()
-			if not self.tokenStream:nextIfEq({type="keyword",value="goto"}) then
-				return self.tokenStream:errorNext(true, "No goto kw")
-			end
+			local gotoKw = self.tokenStream:expect({type="keyword",value="goto"}, true, nil, "entry")
 
-			local name = self.tokenStream:next()
-			if name == nil then return nil, "No label name" end
-			if name.type ~= "identifier" then return nil, "Label name is not an identifier" end
+			local name = self.tokenStream:expect({type="identifier"}, false)
 
 			return {
 				type = "goto",
-				destination = name.value,
+				token = gotoKw,
+				destination = name,
 			}
 		end},
+		---@return Delimiter | Error
 		{"Semicolon", function()
-			self.tokenStream:expect({type="symbol",value=";"}, true)
+			local token = self.tokenStream:expect({type="symbol",value=";"}, true, nil, "entry")
 			return {
-				type = "delimiter"
+				type = "delimiter",
+				token = token,
 			}
 		end},
 	})

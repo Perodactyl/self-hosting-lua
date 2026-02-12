@@ -33,6 +33,7 @@ function Source.new(name, sourceText)
 	})
 
 	local lexer = Lexer.new(output)
+	output.sourceTokenizer = lexer
 	output.sourceTokens = LazyStream.new(lexer:createTokenGenerator(), output, "token")
 
 	return output

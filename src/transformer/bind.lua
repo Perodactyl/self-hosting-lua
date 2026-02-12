@@ -31,7 +31,7 @@ end
 ---@param chunk Chunk
 return function(chunk)
 	local GlobalScope = Scope.new(nil)
-	GlobalScope:bind({type="variable",name="print",external=true})
+	GlobalScope:bind({type="variable",name="print",external=true,isFunction=true,isStdLib=true})
 
 	local scope = GlobalScope
 	---@type Visitor
@@ -47,14 +47,14 @@ return function(chunk)
 		block.scope = newScope
 	end
 
-	function proto:visitDefinition(define, isLocal)
-		Visitor.visitDefinition(self, define, isLocal)
+	function proto:visitDefinition(define, isLocal, isFunction)
+		Visitor.visitDefinition(self, define, isLocal, isFunction)
 		if isLocal then
-			define.binding = scope:bind({type="variable", name=define.inner,external=false})
+			define.binding = scope:bind({type="variable", name=define.inner.value,external=false,isFunction=isFunction,isStdLib=false})
 		else
-			define.binding = scope:ref("variable", define.inner)
+			define.binding = scope:ref("variable", define.inner.value)
 			if define.binding == nil then
-				define.binding = GlobalScope:bind({type="variable", name=define.inner,external=false})
+				define.binding = GlobalScope:bind({type="variable", name=define.inner.value,external=false,isFunction=isFunction,isStdLib=false})
 			end
 		end
 	end
@@ -62,7 +62,7 @@ return function(chunk)
 	function proto:visitAccess(access)
 		Visitor.visitAccess(self, access)
 		if access.subtype == "identifier" then
-			access.binding = scope:ref("variable", access.inner)
+			access.binding = scope:ref("variable", access.inner.value)
 		end
 	end
 

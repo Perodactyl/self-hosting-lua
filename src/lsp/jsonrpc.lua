@@ -2,12 +2,16 @@ local util = require("util")
 
 local jsonrpc = {}
 
+---@return JSONObject | nil
 function jsonrpc.receive()
 	local headerPart = ""
 	local headerEnd
 
 	while true do
 		local char = io.stdin:read("L")
+		if char == nil then
+			return nil
+		end
 		headerPart = headerPart .. char
 		-- log(util.prettyOutput.dump(block))
 

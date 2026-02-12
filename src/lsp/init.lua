@@ -6,38 +6,134 @@ local lspTypes = require("types.lsp")
 local Source = require("source")
 local Parser = require("parser")
 local jsonrpc = require("lsp.jsonrpc")
-
-local semanticTokens = require("lsp.semanticTokens")
+local transformer = require("transformer")
 
 local logFile = io.open("lsp-debug.log", "a")
-local log
+local logImpl
+local logLevelMap = {
+	err = 1,
+	warn = 2,
+	normal = 3,
+	info = 4,
+	debug = 5,
+}
+local targetLogLevel = 5
+
 if logFile ~= nil then
-	log = function(message)
-		logFile:write("[" .. os.date("%T") .. "] " .. message .. "\n")
+	logFile:write("\x1b[3J\x1b[H")
+	logFile:flush()
+	---@param message string
+	---@param logLevel? "err" | "warn" | "info" | "debug" | "normal"
+	logImpl = function(message, logLevel)
+		if logLevelMap[logLevel or "normal"] > targetLogLevel then
+			return
+		end
+		logFile:write("\x1b[33m[" .. os.date("%T") .. "]\x1b[39m " .. message .. "\n")
 		logFile:flush()
 		-- io.stderr:write(message .. "\n")
 		-- io.stderr:flush()
 	end
 else
-	log = function(message)
+	---@param message string
+	---@param logLevel? "err" | "warn" | "info" | "debug" | "normal"
+	logImpl = function(message, logLevel)
+		if logLevelMap[logLevel or "normal"] > targetLogLevel then
+			return
+		end
 		io.stderr:write(message .. "\n")
 		io.stderr:flush()
 	end
-	log("Failed to open log file")
+	logImpl("Failed to open log file")
 end
 
-log("Hello, World!")
+local function loggerFor(scope)
+	return function(message, logLevel)
+		local scopePart = "\x1b[32m[" .. scope .. "]\x1b[39m " .. (" "):rep(16 - #scope - 2)
+		local levelPart = ""
+		if logLevel == nil then logLevel = "normal" end
+		if logLevel == "err"    then levelPart = "   \x1b[91m[ERR]\x1b[39m " end
+		if logLevel == "warn"   then levelPart = "  \x1b[93m[WARN]\x1b[39m " end
+		if logLevel == "normal" then levelPart = "   \x1b[36m[log]\x1b[39m " end
+		if logLevel == "info"   then levelPart = "  \x1b[34;2m[\x1b[3minfo\x1b[23m]\x1b[39;22m " end
+		if logLevel == "debug"  then levelPart = " \x1b[90m[\x1b[3mdebug\x1b[23m]\x1b[39m " end
+		logImpl(scopePart .. levelPart .. message, logLevel or "normal")
+	end
+end
+
+_G.log = loggerFor("globalScope")
+local log = loggerFor("main")
+
+local function loadModule(name)
+	local shortname = name
+
+	local logger = loggerFor(name)
+
+	local exe, loadError = loadfile("src/lsp/modules/" .. name .. ".lua", "t", setmetatable({
+		log = logger
+	}, {
+		__index = _G
+	}))
+
+	if exe == nil then
+		loggerFor("moduleLoader")("Failed to load " .. name .. ": " .. loadError, "err")
+		error("Error while loading " .. name, 0)
+	end
+
+	local success, result = pcall(exe)
+
+	if not success then
+		loggerFor("moduleLoader")(result)
+		error("Error while loading " .. name, 0)
+	end
+
+	return result
+end
+
+---@class LSPServerModule
+---@field client JSONObject
+---@field update fun(self, doc: LSPServerOpenDocument)
+---@field handleRequest fun(self, request: LSPRequestMessage, server: LSPServer): boolean|"continue"
+---@field handleNotification fun(self, notification: LSPNotificationMessage, server: LSPServer): boolean|"continue"
+---@field handleResponse fun(self, response: LSPResponseMessage, server: LSPServer): boolean|"continue"
 
 ---@class LSPServerOpenDocument
----@field doc LSPTextDocumentItem
----@field diagnostics LSPDiagnostic[]
----@field semanticTokens integer[]
+---@field uri LSPDocumentUri
+---@field version integer
+---@field currentText string
+---@field currentSource Source
+---@field currentParseResult Chunk | Error
+---@field server {s:LSPServer}
+local LSPServerOpenDocument = {}
+function LSPServerOpenDocument:name()
+	local root = self.server.s.client.rootUri
+	if root ~= nil and self.uri:sub(1,#root) == root then
+		return self.uri:sub(#root+1)
+	end
+	if true then
+		local pathTrunk = self.uri:gsub("/[^/]+$", "/")
+		for uri,_ in pairs(self.server.s.documents) do
+			for i = 1, #pathTrunk do
+				if uri:sub(i,i) ~= pathTrunk:sub(i,i) then
+					pathTrunk = uri:sub(1,i)
+					break
+				end
+			end
+		end
+		return self.uri:sub(#pathTrunk+1)
+	end
+	return self.uri:gsub("^file://", "", 1)
+end
+
+function LSPServerOpenDocument:stringify()
+	return "\x1b[95;3m" .. self:name() .. "\x1b[39;23m"
+end
 
 ---@class LSPServer
 ---@field initialized 0 | 1 | 2
 ---@field nextMessageId integer
 ---@field clientCapabilities JSONObject | nil
----@field documents List<LSPServerOpenDocument>
+---@field modules List<LSPServerModule>
+---@field documents table<LSPDocumentUri, LSPServerOpenDocument>
 local LSPServer = {}
 
 ---@return LSPServer
@@ -46,12 +142,42 @@ function LSPServer.new()
 		initialized = 0,
 		nextMessageId = 0,
 		documents = util.List(),
+		modules = util.List({
+			loadModule("semanticTokens"),
+			loadModule("diagnostics"),
+			-- loadModule("fileOperations"),
+		}),
 	}, {__index=LSPServer})
 end
 
 function LSPServer:messageId()
 	self.nextMessageId = self.nextMessageId + 1
 	return self.nextMessageId - 1
+end
+
+---@param identifier LSPTextDocumentIdentifier | LSPDocumentUri
+---@return LSPServerOpenDocument
+function LSPServer:getDocument(identifier)
+	return self.documents[identifier.uri or identifier]
+end
+
+function LSPServer:update(uri)
+	local doc = self:getDocument(uri)
+	log("Updating " .. doc:stringify(), "info")
+
+	local source = Source.new(doc.uri, doc.currentText)
+	local result = Parser.new(source):parseChunk()
+
+	doc.currentSource = source
+	doc.currentParseResult = result
+	if not result.isError then
+		---@cast result -Error
+		transformer.bind(result)
+	end
+
+	for _,module in ipairs(self.modules) do
+		module:update(doc)
+	end
 end
 
 ---@param message JSONObject
@@ -69,39 +195,49 @@ end
 
 ---@param request LSPRequestMessage
 function LSPServer:handleRequest(request)
-	log("Receiving request " .. request.id .. ": " .. request.method)
+	-- log("Receiving request " .. request.id .. ": " .. request.method)
 	if request.method == "initialize" then
 		if self.initialized ~= 0 then error("Additional initialize request") end
-		self.clientCapabilities = request.params.capabilities --[[@as JSONObject]]
+		self.client = request.params --[[@as JSONObject]]
+		do
+			local connectMessage = "Client "
+			if self.client.clientInfo ~= nil then
+				connectMessage = connectMessage .. "\x1b[33m" .. self.client.clientInfo.name .. "\x1b[39m "
+				if self.client.clientInfo.version ~= nil then
+					connectMessage = connectMessage .. "\x1b[32m" .. self.client.clientInfo.version .. "\x1b[39m "
+				end
+			end
+			connectMessage = connectMessage .. " connecting"
+			log(connectMessage)
+		end
 		self:sendMessage({
 			id = request.id,
 			result = {
-				capabilities = {
-					positionEncoding = "utf-8",
-					textDocumentSync = 1,
-					diagnosticProvider = {
-						interFileDependencies = false,
-						workspaceDiagnostics = false,
+				capabilities = util.tableUtils.merge(
+					{
+						positionEncoding = "utf-8",
+						textDocumentSync = 1,
 					},
-					semanticTokensProvider = {
-						legend = {
-							tokenTypes = semanticTokens.typeLegend,
-							tokenModifiers = semanticTokens.modifierLegend,
-						},
-						range = false,
-						full = true,
-					},
-					-- documentSymbolProvider = true,
-				}
-			}
+					table.unpack(self.modules:getEach("capabilities"))
+				),
+				serverInfo = {
+					name = "MyLua",
+					version = "beta",
+				},
+			},
 		})
 		self.initialized = 1
-	elseif request.method == "textDocument/diagnostic" then
-		self:publishDiagnostics(request.params.textDocument.uri, request.id)
-	elseif request.method == "textDocument/semanticTokens/full" then
-		self:publishSemanticTokens(request.params.textDocument.uri, request.id)
-	else
-		log("Responding with MethodNotFound")
+		return
+	end
+
+	local handled
+	for _,module in ipairs(self.modules) do
+		handled = module:handleRequest(request, self)
+		if handled and handled ~= "continue" then break end
+	end
+
+	if not handled then
+		log("Request " .. request.id .. " (" .. request.method .. ") unhandled; respond with MethodNotFound", "warn")
 		self:sendMessage({
 			id = request.id,
 			error = {
@@ -114,135 +250,94 @@ end
 
 ---@param response LSPResponseMessage
 function LSPServer:handleResponse(response)
-	log("Receiving response: " .. response.id)
+	local handled
+	for _,module in ipairs(self.modules) do
+		handled = module:handleResponse(response, self)
+		if handled and handled ~= "continue" then break end
+	end
+
+	if not handled then
+		log("Received unhandled response: " .. response.id, "warn")
+	end
 end
 
 ---@param notification LSPNotificationMessage
 function LSPServer:handleNotification(notification)
-	log("Receiving notification: " .. notification.method)
+	-- log("Receiving notification: " .. notification.method)
 	if notification.method == "initialized" then
 		if self.initialized ~= 1 then error("Bad initialization") end
 		self.initialized = 2
-		log("Initialization complete")
+		log("Connection initialized successfully")
+		return
 	elseif notification.method == "textDocument/didOpen" then
 		local doc = notification.params.textDocument --[[@as LSPTextDocumentItem]]
 
-		table.insert(self.documents, {
-			doc = doc,
-			diagnostics = util.List(),
-		})
+		self.documents[doc.uri] = setmetatable({
+			uri = doc.uri,
+			version = doc.version,
+			currentText = doc.text,
+			server = setmetatable({s=self}, {__mode="v"})
+		}, {__index=LSPServerOpenDocument})
+
+		log("Added document " .. self.documents[doc.uri]:stringify())
+
 		self:update(doc.uri)
+		return
 	elseif notification.method == "textDocument/didChange" then
 		local doc = notification.params.textDocument --[[@as LSPVersionedTextDocumentIdentifier]]
-		local target = self.documents:find(function(d) return d.doc.uri == doc.uri end)
-		if target == nil then return end
-		target.doc.version = doc.version
+		local target = self:getDocument(doc)
+		target.version = doc.version
 		local changes = notification.params.contentChanges --[[@as List<LSPTextDocumentContentChangeEvent>]]
 
 		for _,change in ipairs(changes) do
-			target.doc.text = change.text
+			target.currentText = change.text
 		end
 
 		self:update(doc.uri)
+		return
+	end
+
+	local handled
+	for _,module in ipairs(self.modules) do
+		handled = module:handleNotification(notification, self)
+		if handled and handled ~= "continue" then break end
+	end
+
+	if not handled then
+		log("Received unhandled notification: " .. notification.method, "info")
 	end
 end
 
 ---@param message JSONObject
 function LSPServer:sendMessage(message)
-	log("Sending: " .. util.prettyOutput.dump(message))
+	-- log("Sending: " .. util.prettyOutput.dump(message))
 	jsonrpc.send(message)
 end
 
-function LSPServer:update(uri)
-	local doc = self.documents:find(function(d) return d.doc.uri == uri end)
-	if doc == nil then return end
-	log("Updating " .. doc.doc.uri)
-
-	local diagnostics = util.List()
-
-	local source = Source.new(doc.doc.uri, doc.doc.text)
-	local result = Parser.new(source):parseChunk()
-	if result.isError then
-		diagnostics:push({
-			message = result:stringify(false),
-			range = result.span:toRange()
-		})
-	end
-
-	doc.diagnostics = diagnostics
-
-	local tokens = util.List()
-
-	local lastLine, lastStartChar = 0, 0
-	for _,token in ipairs(source.sourceTokens.buffer) do
-		local span, type = token.span, token.type
-		local range = span:toRange()
-
-		local semanticTokenType = type --[[@as string]]
-		if type == "nilLiteral" then semanticTokenType = "constant" end
-		if type == "boolLiteral" then semanticTokenType = "constant" end
-		if type == "string" then semanticTokenType = "string" end
-		if type == "number" then semanticTokenType = "number" end
-		if type == "keyword" then semanticTokenType = "keyword" end
-		if type == "operator" then semanticTokenType = "operator" end
-		if type == "symbol" then semanticTokenType = "operator" end
-		if type == "assign" then semanticTokenType = "operator" end
-		if type == "identifier" then semanticTokenType = "variable" end
-
-		local line, startChar = range.start.line, range.start.character
-		log("Line: " .. line .. " startChar: " .. startChar)
-		local deltaLine, deltaStartChar = line - lastLine, startChar - lastStartChar
-		if deltaLine > 0 then deltaStartChar = startChar end
-		lastLine, lastStartChar = line, startChar
-		local length = span.stop - span.start + 1
-
-		local tokenType = (semanticTokens.typeLegend[semanticTokenType] or 0) - 1
-		local tokenModifiers = 0
-
-		tokens:push(deltaLine, deltaStartChar, length, tokenType, tokenModifiers)
-		-- break
-	end
-
-	doc.semanticTokens = tokens
+function LSPServer:exit()
+	log("Exiting")
 end
 
-function LSPServer:publishDiagnostics(uri, requestID)
-	local doc = self.documents:find(function(d) return d.doc.uri == uri end)
-	if doc == nil then return end
-	self:sendMessage({
-		id = requestID,
-		method = not requestID and "textDocument/publishDiagnostics" or nil,
-		result = {
-			kind = "full",
-			items = doc.diagnostics,
-		}
-	})
-end
+local server = LSPServer.new()
 
-function LSPServer:publishSemanticTokens(uri, requestID)
-	local doc = self.documents:find(function(d) return d.doc.uri == uri end)
-	if doc == nil then return end
-	self:sendMessage({
-		id = requestID,
-		-- method = not requestID and "textDocument/publishDiagnostics" or nil,
-		result = {
-			data = doc.semanticTokens
-		}
-	})
-end
-
-local function launch()
-	local server = LSPServer.new()
-
+local function loop()
 	while true do
 		local message = jsonrpc.receive()
-		server:handleMessage(message)
+		if message == nil then
+			server:exit()
+			break
+		else
+			server:handleMessage(message)
+		end
 	end
 end
 
-local success, errorMessage = pcall(launch)
+local success, errorMessage = xpcall(loop, debug.traceback)
 
 if not success then
-	log(errorMessage)
-	error(errorMessage, 0)
+	log(errorMessage, "err")
+	pcall(function()
+		-- send error to LSP client
+	end)
+	os.exit(1)
 end
